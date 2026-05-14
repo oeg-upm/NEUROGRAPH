@@ -97,10 +97,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Instalar PyClause (requiere compilador C++14)**
+**Instalar PyClause**
 
 ```bash
-pip install "git+https://github.com/symbolic-kg/PyClause.git"
+git clone https://github.com/symbolic-kg/PyClause
+cd PyClause
+pip install -e .
 ```
 
 ### 3. Configurar Hugging Face 🤗
