@@ -9,15 +9,14 @@ from searchInGraph import buscar_frecuentes_por_opcion, inferir_valor_adecuado
 from formatHelper import extraer_support_category, extraer_cliente, extraer_parametro_gen
 from rdflib import Graph
 
-from c_clause import QAHandler, Loader
-from clause import Options
+#from c_clause import QAHandler, Loader
+#from clause import Options
 
 
 
 graph = Graph()
 
 graph.parse("filtrado.ttl", format="turtle")
-
 
 
 
@@ -241,8 +240,8 @@ if __name__ == '__main__':
             mi_opcion = graph_data[0]
         
 
-        if not os.path.exists('../textos/logs'):
-            os.makedirs('../textos/logs')
+        if not os.path.exists('textos/logs'):
+            os.makedirs('textos/logs')
         
 
         
@@ -256,7 +255,7 @@ if __name__ == '__main__':
             data = "El campo a rellenar es "+diccionario_predicados[cat_buscar] + " y estas son las opciones\n"+ mi_opcion
 
         #No está conectado el LLM, pero así se usaría 
-        prompt = open_file('../textos/contexto.txt').replace('<<DATOS>>', data).replace('<<CONVERSACIÓN>>', prev_conv).replace('<<MENSAJE>>', a)
+        prompt = open_file('textos/contexto.txt').replace('<<DATOS>>', data).replace('<<CONVERSACIÓN>>', prev_conv).replace('<<MENSAJE>>', a)
 
 
 
