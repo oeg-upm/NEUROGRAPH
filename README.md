@@ -221,8 +221,8 @@ python llm_kge/src/run_pipeline.py --phase 3
 
 Top-K predicciones implícitas por entidad (defecto: top-10).
 
+<!--
 ---
-
 ### Paso 3b — Aprender reglas simbólicas con AnyBURL (opcional)
 
 ```bash
@@ -238,6 +238,7 @@ Aprende reglas Horn sobre `data/incident_triplets.n3` y genera `data/reglas/rule
 **Resultado**: ~3K reglas (confianza entre 0.75 y 1.0, soporte medio ~1063).
 
 El script descarga automáticamente el JAR de AnyBURL e instala Java si no está disponible. Las reglas se cargan en la fase 4 mediante PyClause.
+-->
 
 ---
 
@@ -245,11 +246,13 @@ El script descarga automáticamente el JAR de AnyBURL e instala Java si no está
 
 El sistema sigue una **inferencia en cascada** para cada campo de la incidencia:
 
+![Diagrama de Crear Incidencia](/llm_kge/figuras/pipeline.png)
+
 1. **RULE** — PyClause comprueba si alguna regla AnyBURL infiere el valor. Si existe, devuelve la sugerencia con `rule_id` y `confidence` y para.
 2. **KGE+CBR** — Si no hay regla aplicable, el link prediction + recuperación de casos similares genera candidatos.
 3. **LLM** — Verbaliza la pregunta al usuario y extrae su respuesta libre.
 
-Cada valor queda etiquetado con su fuente de trazabilidad: `USUARIO`, `RULE`, `KGE` o `CBR`.
+Cada valor queda etiquetado con su fuente de trazabilidad: `RULE` , `KGE` o `USUARIO`.
 
 **Sin LLM** (menú numerado, no requiere vLLM):
 ```bash
