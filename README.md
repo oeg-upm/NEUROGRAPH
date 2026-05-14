@@ -3,7 +3,7 @@ Implementación de los módulos de recomendación desarrollados
 
 
 
-## LLM_Rag
+# LLM-RAG
 
 ### Instalación
 
@@ -16,7 +16,7 @@ Ejecutar el programa 'chat.py'.
 Es importante que la carpeta 'textos' esté en el mismo directorio que chat.
 
 
-# llm-kge
+# LLM-KGE
 
 ## Descripción
 
