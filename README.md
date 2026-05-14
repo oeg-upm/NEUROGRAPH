@@ -29,6 +29,7 @@ Este proyecto implementa un sistema **neuro-simbólico end-to-end** para la crea
 | 3 | LLM conversacional (verbalización) | `USUARIO` | Siempre (interfaz) |
 
 La capa de reglas es **determinista y explicable**; el KGE+CBR es el **fallback probabilístico** que siempre devuelve algo. El LLM nunca inventa valores: solo formula preguntas y extrae la elección del usuario entre opciones verificadas por el grafo.
+
 ---
 
 ## Arquitectura del Pipeline
