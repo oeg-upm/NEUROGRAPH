@@ -99,7 +99,6 @@ if __name__ == '__main__':
     prev_conv = ""
     filename = unique_conv_id+'_log.txt' 
     
-    #Por si se quiere mantener un registro de las conversaciones
     save_file('./textos/logs/%s' % filename, prev_conv)
 
     primera = True
@@ -137,7 +136,6 @@ if __name__ == '__main__':
         
         
         if (a == "q"):
-            #save_json('./nexo/%s.json' % unique_id, metadata)
             break
         
         
@@ -254,22 +252,21 @@ if __name__ == '__main__':
         else:
             data = "El campo a rellenar es "+diccionario_predicados[cat_buscar] + " y estas son las opciones\n"+ mi_opcion
 
-        #No está conectado el LLM, pero así se usaría 
+        #No está conectado el LLM, pero descomentando las siguientes líneas se usaría
+
         prompt = open_file('textos/contexto.txt').replace('<<DATOS>>', data).replace('<<CONVERSACIÓN>>', prev_conv).replace('<<MENSAJE>>', a)
 
-
-
-        #output = text_completion(prompt) #aquí se genera
-        #timestamp = time()
-        #timestring = timestamp_to_datetime(timestamp)
+        output = text_completion(prompt) #aquí se genera
+        timestamp = time()
+        timestring = timestamp_to_datetime(timestamp)
         #
-        #messageBot = '%s: %s - %s' % ('[Asistente]', timestring, output)
+        messageBot = '%s: %s - %s' % ('[Asistente]', timestring, output)
         #
-        #print('\n\[Asistente]: %s' % output) 
+        print('\n\[Asistente]: %s' % output)
         
         # Y aquí se guardaría los datos de la conversación 
         
-        #save_file('./textos/logs/%s' % filename, prev_conv+"\n"+message+"\n"+messageBot)
+        save_file('./textos/logs/%s' % filename, prev_conv+"\n"+message+"\n"+messageBot)
         #timestamp = time()
         #timestring = timestamp_to_datetime(timestamp)
         
