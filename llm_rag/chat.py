@@ -8,6 +8,7 @@ import datetime
 from searchInGraph import buscar_frecuentes_por_opcion, inferir_valor_adecuado
 from formatHelper import extraer_support_category, extraer_cliente, extraer_parametro_gen
 from rdflib import Graph
+import config
 
 #from c_clause import QAHandler, Loader
 #from clause import Options
@@ -16,8 +17,7 @@ from rdflib import Graph
 
 graph = Graph()
 
-graph.parse("filtrado.ttl", format="turtle")
-
+graph.parse(config.TTL_FILE_PATH, format=config.TTL_FORMAT)
 
 
 mi_model = "mistral:latest"
@@ -54,7 +54,7 @@ client = OpenAI(
 )
 
 
-def text_completion(prompt, engine=mi_model):
+def text_completion(prompt, engine=config.MI_MODELO):
     max_retry = 5
     retry = 0
 
@@ -62,7 +62,7 @@ def text_completion(prompt, engine=mi_model):
     
     while True:
         try:
-            response = client.chat.completions.create(
+            response = config.client.chat.completions.create(
                                 messages=[
                                     {
                                         "role": "user",
@@ -88,7 +88,7 @@ def text_completion(prompt, engine=mi_model):
             if retry >= max_retry:
                 return "Model error: %s" % oops
             print('Error communicating with model:', oops)
-            sleep(1)
+            sleep(config.RETRY_DELAY_SECONDS)
 
 
 
@@ -97,9 +97,9 @@ if __name__ == '__main__':
     
     unique_conv_id = str(uuid4())
     prev_conv = ""
-    filename = unique_conv_id+'_log.txt' 
-    
-    save_file('./textos/logs/%s' % filename, prev_conv)
+    filename = unique_conv_id+'_log.txt'
+    log_file_path = os.path.join(config.LOGS_DIR, filename)
+    save_file(log_file_path, prev_conv)
 
     primera = True
     buscar = False
@@ -108,23 +108,7 @@ if __name__ == '__main__':
     graph_data = []
     mis_datos = [None, None, None, None, None, None]
     
-    diccionario_predicados = {
-        0: "int_hasCustomer",
-        1: "hasSupportCategory",  # en teoría es hasUser pero no hay de eso, al menos en filtrado.ttl. Lo cambio a hasSupportCategory
-        2: "hasTypeInc",
-        3: "incident_hasOrigin",
-        4: "hasSupportGroup",
-        5: "hasTechnician"
-        }
-    
-    diccionario_prefijos = {
-    0: "company",         # Para int_hasCustomer
-    1: "supportCategory", # Para hasSupportCategory
-    2: "typeIncident",    # Para hasTypeInc
-    3: "incidentOrigin",  # Para incident_hasOrigin
-    4: "supportGroup",    # Para hasSupportGroup
-    5: "employee"         # Para hasTechnician (que usa el prefijo employee)
-}
+
     
     while True:
 
@@ -149,7 +133,7 @@ if __name__ == '__main__':
 
         if graph_data:
             # 1. Mostrar todas las opciones a la vez (estilo imagen)
-            print(f"\n[Asistente] ¿Cuál es el valor para {diccionario_prefijos[cat_buscar]}? (Responde con el número o 'si' si es la primera opción)")
+            print(f"\n[Asistente] ¿Cuál es el valor para {config.DICCIONARIO_PREFIJOS[cat_buscar]}? (Responde con el número o 'si' si es la primera opción)")
             print("Opciones recomendadas (GraphRAG):")
             
             for i, opcion in enumerate(graph_data):
@@ -238,37 +222,36 @@ if __name__ == '__main__':
             mi_opcion = graph_data[0]
         
 
-        if not os.path.exists('textos/logs'):
-            os.makedirs('textos/logs')
-        
+        if not os.path.exists(config.LOGS_DIR):
+            os.makedirs(config.LOGS_DIR)
 
-        
-        prev_conv = open_file('./textos/logs/%s' % filename)
+
+
+        prev_conv = open_file(log_file_path)
         
         
 
         if graph_data == None:
             data = "No se encontraron datos. Seguramente sea un error por parte del usuario. Pregunta si se ha introducido bien el grupo"
         else:
-            data = "El campo a rellenar es "+diccionario_predicados[cat_buscar] + " y estas son las opciones\n"+ mi_opcion
+            data = "El campo a rellenar es "+config.DICCIONARIO_PREDICADOS[cat_buscar] + " y estas son las opciones\n"+ mi_opcion
 
         #No está conectado el LLM, pero descomentando las siguientes líneas se usaría
 
-        prompt = open_file('textos/contexto.txt').replace('<<DATOS>>', data).replace('<<CONVERSACIÓN>>', prev_conv).replace('<<MENSAJE>>', a)
+        #prompt = open_file(config.CONTEXTO_FILE_PATH).replace('<<DATOS>>', data).replace('<<CONVERSACIÓN>>', prev_conv).replace('<<MENSAJE>>', a)
 
-        output = text_completion(prompt) #aquí se genera
-        timestamp = time()
-        timestring = timestamp_to_datetime(timestamp)
+        #output = text_completion(prompt) #aquí se genera
+        #timestamp = time()
+        #timestring = timestamp_to_datetime(timestamp)
         #
-        messageBot = '%s: %s - %s' % ('[Asistente]', timestring, output)
+        #messageBot = '%s: %s - %s' % ('[Asistente]', timestring, output)
         #
-        print('\n\[Asistente]: %s' % output)
+        #print('\n\[Asistente]: %s' % output)
         
         # Y aquí se guardaría los datos de la conversación 
         
-        save_file('./textos/logs/%s' % filename, prev_conv+"\n"+message+"\n"+messageBot)
-        #timestamp = time()
-        #timestring = timestamp_to_datetime(timestamp)
+        #save_file(log_file_path, prev_conv+"\n"+message+"\n"+messageBot)
+
         
 
         

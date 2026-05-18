@@ -29,29 +29,13 @@ pip install -r requirements.txt
 ```
 
 
-Con rdflib se analiza el conjunto de tripletas que se utiliza, que actualmente es el fichero llamado "filtrado.ttl", si se quiere utilizar otro o ccambiar la ruta modificarlo en la siguiente línea.
+Con rdflib se analiza el conjunto de tripletas que se utiliza, que actualmente es el fichero llamado "filtrado.ttl", si se quiere utilizar otro o cambiar la ruta en el fichero de configuración.
 
-```python
-graph.parse("filtrado.ttl", format="turtle")
-```
 Es importante que la carpeta 'textos' esté en el mismo directorio que chat o que en su defecto se actualicen las rutas en el código.
 
 
+En caso de usar un LLM asegurarse que se tiene instalado en modelo en local y que el nombre del modelo y el puerto del para accederlo sea el correcto. Por defecto se utiliza mistral con ollama. Si se quiere modificar cambiar el fichero config.py
 
-
-
-En caso de usar un LLM asegurarse que se tiene instalado en modelo en local y que el nombre del modelo y el puerto del para accederlo sea el correcto. Por defecto se utiliza mistral con ollama. Si se quiere modificar se cambiarán las siguientes dos líneas de chat.py.
-
-```python
-mi_model = "mistral:latest" # cambiar el nombre del modelo en caso de que se utilice otro
-```
-
-```python
-client = OpenAI(
-    base_url="http://localhost:11434/v1", # puerto de ollama local
-    api_key="ollama" # en general no se necesita llave para acceder a un servidor en local, pero en caso de usar otro aquí iría
-)
-```
 
 ### Pipeline
 
