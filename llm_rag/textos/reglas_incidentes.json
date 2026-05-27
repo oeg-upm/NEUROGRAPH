@@ -1,0 +1,323 @@
+[
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "int_hasCustomer": "company__3S8A2Y7FV"
+        },
+        "then": {
+            "hasTechnician": "employee__429"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "hasSupportGroup": "supportGroup_14976691762302662",
+            "hasSupportTeam": "supportTeam_149762304211762302899"
+        },
+        "then": {
+            "hasTechnician": "employee__430"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__4"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "int_hasCustomer": "ss"
+        },
+        "then": {
+            "hasStateIncident": "statusIncident__2"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "hasSupportCategory": "supportCategory_149763021762302662",
+            "hasSupportGroup": "supportGroup_149761041762302662"
+        },
+        "then": {
+            "hasExternalTechnician": "person_1497630881762302663"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__2",
+            "hasSupportGroup": "supportGroup_149761011762302662"
+        },
+        "then": {
+            "hasSupportTeam": "supportTeam_14976254341762302678"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "int_hasCustomer": "company__0GQ4QH8N2"
+        },
+        "then": {
+            "hasSupportCategory": "supportCategory_149763514921762303044"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__3"
+        },
+        "then": {
+            "hasSupportGroup": "supportGroup_149762881762302662"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "hasSupportGroup": "supportGroup_149761041762302662",
+            "hasTypeInc": "typeIncident__2"
+        },
+        "then": {
+            "hasExternalTechnician": "person_1497642801762302663"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "int_hasCustomer": "ss",
+            "hasTypeInc": "typeIncident__1"
+        },
+        "then": {
+            "hasSupportGroup": "supportGroup_14976691762302662"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "df",
+        "if": {
+            "int_hasCustomer": "company__P8EM3ZO35",
+            "hasSupportTeam": "supportTeam_14976254341762302678"
+        },
+        "then": {
+            "hasTechnician": "employee__366"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__4"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__2"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__1"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "ss"
+        },
+        "then": {
+            "incident_hasOrigin": "incidentOrigin__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "company__0GQ4QH8N2"
+        },
+        "then": {
+            "incident_hasOrigin": "incidentOrigin__3"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasExternalTechnician": "person_1497630881762302663"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasSupportGroup": "supportGroup_149761041762302662"
+        },
+        "then": {
+            "hasTechnician": "employee__136"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "company__3S8A2Y7FV"
+        },
+        "then": {
+            "hasTechnician": "employee__430"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasTechnician": "employee__365"
+        },
+        "then": {
+            "incident_hasOrigin": "incidentOrigin__4"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasSupportTeam": "supportTeam_149762304211762302899"
+        },
+        "then": {
+            "hasSupportCategory": "supportCategory_149763514921762303044"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "company__P8EM3ZO35"
+        },
+        "then": {
+            "hasSupportGroup": "supportGroup_14976106631762302666"
+        }
+    },
+
+{
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__4"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__2"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "incident_hasOrigin": "incidentOrigin__1"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "ss"
+        },
+        "then": {
+            "incident_hasOrigin": "incidentOrigin__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "company__0GQ4QH8N2"
+        },
+        "then": {
+            "incident_hasOrigin": "incidentOrigin__3"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasExternalTechnician": "person_1497630881762302663"
+        },
+        "then": {
+            "hasTypeInc": "typeIncident__1"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasSupportGroup": "supportGroup_149761041762302662"
+        },
+        "then": {
+            "hasTechnician": "employee__136"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "company__3S8A2Y7FV"
+        },
+        "then": {
+            "hasTechnician": "employee__430"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasTechnician": "employee__365"
+        },
+        "then": {
+            "incident_hasOrigin": "incidentOrigin__4"
+        }
+    },
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "hasSupportTeam": "supportTeam_149762304211762302899"
+        },
+        "then": {
+            "hasSupportCategory": "supportCategory_149763514921762303044"
+        }
+    },
+    
+    {
+        "appliesTo": "incident",
+        "ruleType": "noValid",
+        "if": {
+            "int_hasCustomer": "company__P8EM3ZO35"
+        },
+        "then": {
+            "hasSupportGroup": "supportGroup_14976106631762302666"
+        }
+    }
+
+
+
+]
