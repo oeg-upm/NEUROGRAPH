@@ -10,16 +10,19 @@ TTL_FORMAT = "turtle"
 # ==========================================
 # CONFIGURACIÓN DEL MODELO DE LENGUAJE (LLM)
 # ==========================================
-MI_MODELO = "mistral:latest"
+MI_MODELO = "llama3.1:70b"
 
 # Configuración del cliente API (Ollama local o servicios en la nube)
+#"http://localhost:11434/v1"
 API_BASE_URL = "http://localhost:11434/v1"
+
 API_KEY = "ollama"
 
 # Inicialización del cliente de OpenAI
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=API_KEY
+    api_key=API_KEY,
+    timeout=None
 )
 
 # Configuración de reintentos para la generación de texto
@@ -30,7 +33,7 @@ RETRY_DELAY_SECONDS = 1
 # CONFIGURACIÓN DE RUTAS Y LOGS
 # ==========================================
 LOGS_DIR = os.path.join("textos", "logs")
-CONTEXTO_FILE_PATH = os.path.join("textos", "contexto.txt")
+CONTEXTO_FILE_PATH = os.path.join("textos", "contextoeval1.txt")
 
 # ==========================================
 # DICCIONARIOS Y PARÁMETROS DEL ASISTENTE
