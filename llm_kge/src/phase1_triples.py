@@ -1,33 +1,30 @@
 """
 Fase 1 — Parseo del grafo RDF a tripletas TSV para PyKEEN.
 
-Split por incidencias: se dividen los IDs de incidencias (80/10/10)
-y todas las tripletas de cada incidencia van al mismo split.
-Tripletas cuyo head no es una incidencia van a train (entidades auxiliares).
+Lee train_full.ttl (el 95% generado por la fase 0, con el 5% de test ya
+reservado en test_eval.ttl) y vuelca todas las tripletas en un único
+train.tsv, sin ningún split adicional.
 
 Salida:
-  data/triples/train.tsv   (80 % de incidencias + tripletas auxiliares)
-  data/triples/valid.tsv   (10 % de incidencias)
-  data/triples/test.tsv    (10 % de incidencias)
+  data/triples/train.tsv      (todas las tripletas de train_full.ttl)
   out/maps/entity_to_id.json
   out/maps/relation_to_id.json
 
 Uso:
   python src/phase1_triples.py
+  python src/run_pipeline.py --phase 1
 """
 
 import json
-import random
 import sys
 from pathlib import Path
 
-# Añadir src/ al path para importar generate_corpus
 sys.path.insert(0, str(Path(__file__).parent))
 
 from rdflib import RDF
 
 import config as cfg
-from generate_corpus import load_graph, extract_label
+from utils.graph_utils import load_graph, extract_label
 
 
 # ---------------------------------------------------------------------------
@@ -51,65 +48,6 @@ def extract_all_triples(g) -> list[tuple[str, str, str]]:
         triples.append((head, relation, tail))
     print(f"      {len(triples):,} tripletas extraídas  ({skipped:,} rdf:type omitidas)")
     return triples
-
-
-# ---------------------------------------------------------------------------
-# División estratificada por predicado
-# ---------------------------------------------------------------------------
-
-def split_by_incident(
-    triples: list[tuple[str, str, str]],
-    train_ratio: float = cfg.TRAIN_RATIO,
-    valid_ratio: float = cfg.VALID_RATIO,
-    seed: int          = cfg.RANDOM_SEED,
-) -> tuple[list, list, list]:
-    """
-    Divide las tripletas en train/valid/test agrupando por incidencia.
-
-    1. Identifica todos los IDs de incidencia únicos (head starts with 'incident_')
-    2. Reparte los IDs de incidencias en 80/10/10
-    3. Asigna TODAS las tripletas de cada incidencia al mismo split
-    4. Tripletas cuyo head NO es una incidencia van a train (entidades auxiliares)
-    """
-    rng = random.Random(seed)
-
-    # 1. Identificar IDs de incidencias únicos
-    incident_ids = sorted({h for h, _, _ in triples if h.startswith("incident_")})
-    print(f"      Incidencias únicas: {len(incident_ids):,}")
-
-    # 2. Shuffle y split de IDs
-    rng.shuffle(incident_ids)
-    n  = len(incident_ids)
-    i1 = int(n * train_ratio)
-    i2 = int(n * (train_ratio + valid_ratio))
-    train_ids = set(incident_ids[:i1])
-    valid_ids = set(incident_ids[i1:i2])
-    test_ids  = set(incident_ids[i2:])
-
-    print(f"      Incidencias  →  train: {len(train_ids):,}  "
-          f"valid: {len(valid_ids):,}  test: {len(test_ids):,}")
-
-    # 3. Asignar tripletas según la incidencia del head
-    train_set, valid_set, test_set = [], [], []
-    non_incident = 0
-    for triple in triples:
-        head = triple[0]
-        if head in train_ids:
-            train_set.append(triple)
-        elif head in valid_ids:
-            valid_set.append(triple)
-        elif head in test_ids:
-            test_set.append(triple)
-        else:
-            # Head no es una incidencia → train (auxiliares)
-            train_set.append(triple)
-            non_incident += 1
-
-    if non_incident:
-        print(f"      Tripletas auxiliares (no-incidencia) añadidas a train: {non_incident:,}")
-    print(f"      Tripletas  →  train: {len(train_set):,}  "
-          f"valid: {len(valid_set):,}  test: {len(test_set):,}")
-    return train_set, valid_set, test_set
 
 
 # ---------------------------------------------------------------------------
@@ -160,28 +98,32 @@ def build_and_save_mappings(
 def run() -> None:
     print("=" * 60)
     print("FASE 1 — Parseo del grafo RDF a tripletas TSV")
+    print("  train_full.ttl → train.tsv (sin split)")
     print("=" * 60)
 
+    input_file = cfg.TRAIN_TTL
+
+    if not input_file.exists():
+        raise FileNotFoundError(
+            f"No se encontró {input_file}\n"
+            "  Ejecuta primero: python src/run_pipeline.py --phase 0"
+        )
+
     # 1. Cargar grafo
-    g = load_graph(cfg.TTL_FILE)
+    g = load_graph(input_file)
 
     # 2. Extraer tripletas
-    print("[1/4] Extrayendo tripletas ...")
+    print("[1/3] Extrayendo tripletas ...")
     all_triples = extract_all_triples(g)
 
-    # 3. Dividir por incidencias
-    print("[2/4] Dividiendo por incidencias en train/valid/test (80/10/10) ...")
-    train_triples, valid_triples, test_triples = split_by_incident(all_triples)
-
-    # 4. Guardar TSV
-    print("[3/4] Guardando archivos TSV ...")
     cfg.TRIPLES_DIR.mkdir(parents=True, exist_ok=True)
-    save_tsv(train_triples, cfg.TRAIN_TSV)
-    save_tsv(valid_triples, cfg.VALID_TSV)
-    save_tsv(test_triples,  cfg.TEST_TSV)
 
-    # 5. Mapas
-    print("[4/4] Generando mapas entidad/relación → id ...")
+    # 3. Guardar train.tsv (todas las tripletas, sin split)
+    print("[2/3] Guardando train.tsv ...")
+    save_tsv(all_triples, cfg.TRAIN_TSV)
+
+    # 4. Mapas
+    print("[3/3] Generando mapas entidad/relación → id ...")
     build_and_save_mappings(all_triples)
 
     print("\n✓ Fase 1 completada.")

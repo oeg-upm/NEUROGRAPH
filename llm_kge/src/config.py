@@ -18,34 +18,30 @@ except ImportError:
 
 BASE_DIR    = Path(__file__).parent.parent
 DATA_DIR    = BASE_DIR / "data"
-TTL_FILE    = DATA_DIR / "filtrado.ttl"
+TRAIN_TTL   = DATA_DIR / "train_full.ttl"   # generado por phase0_split
+TEST_TTL    = DATA_DIR / "test_eval.ttl"
 
 TRIPLES_DIR = DATA_DIR / "triples"
-CORPUS_DIR  = DATA_DIR / "corpus"
+
+# Reglas AnyBURL para la capa simbólica (incident creator + eval fase 6)
+RULES_FILE  = DATA_DIR / "reglas" / "train_full_incidents" / "rules-1000"
 
 OUT_DIR     = BASE_DIR / "out"
 MAPS_DIR    = OUT_DIR / "maps"  # Mapas entity_to_id / relation_to_id (compartidos)
 PRED_DIR    = OUT_DIR / "predictions"
 EVAL_DIR    = OUT_DIR / "evaluation"
 
-# Corpus generado por generate_corpus.py
-QA_CORPUS   = CORPUS_DIR / "qa_corpus.json"
-TRIPLES_VRB = CORPUS_DIR / "triples_verbalized.json"
-
-# Splits PyKEEN
+# Tripletas PyKEEN (flujo incident_triplets: todo en train.tsv, sin split)
 TRAIN_TSV   = TRIPLES_DIR / "train.tsv"
-VALID_TSV   = TRIPLES_DIR / "valid.tsv"
-TEST_TSV    = TRIPLES_DIR / "test.tsv"
 
-# Predicciones y evaluación
+# Predicciones
 IMPLICIT_RELS_FILE  = PRED_DIR / "implicit_relations.json"
-EVAL_RESULTS_FILE   = EVAL_DIR / "results.json"
 
 # ---------------------------------------------------------------------------
 # Multi-model KGE
 # ---------------------------------------------------------------------------
 
-KGE_MODELS = ['TransE', 'DistMult', 'ComplEx']
+KGE_MODELS = ['TransE', 'RotatE', 'TransH', 'HAKE', 'DistMult', 'ComplEx', 'TorusE', 'PairRE', "ConvE"]
 
 
 def model_dir(model_name: str) -> Path:
@@ -68,48 +64,39 @@ def relation_embeddings_path(model_name: str) -> Path:
 ENTITY_TO_ID        = MAPS_DIR / "entity_to_id.json"
 RELATION_TO_ID      = MAPS_DIR / "relation_to_id.json"
 
-# Rutas por defecto para embeddings apuntan a TransE (ahora el modelo default)
-MODELS_DIR          = model_dir('transe')
-EMBED_DIR           = embed_dir('transe')
-ENTITY_EMBEDDINGS   = entity_embeddings_path('transe')
-RELATION_EMBEDDINGS = relation_embeddings_path('transe')
-
-# ---------------------------------------------------------------------------
-# GLiNER2
-# ---------------------------------------------------------------------------
-
-GLINER_MODEL = "fastino/gliner2-base-v1"
-
-# ---------------------------------------------------------------------------
-# Corpus de evaluación link prediction (por modelo)
-# ---------------------------------------------------------------------------
-
-LP_EVAL_CORPUS       = CORPUS_DIR / "link_prediction_eval.json"
+# Salida de la comparación de entrenamiento multi-modelo (phase2 --all-models)
 MODEL_COMPARISON_DIR = EVAL_DIR / "model_comparison"
 
-# Entity-to-entity evaluation corpus
-ENTITY_EVAL_CORPUS = CORPUS_DIR / "entity_to_entity_eval.json"
-
-# Pares a evaluar: (source_prop, target_prop)
-# Lectura: "dado el valor de source_prop, predice el valor de target_prop"
-ENTITY_EVAL_PAIRS = [
-    ("int_hasCustomer",  "hasTechnician"),        # empresa → técnico
-    ("hasSupportGroup",  "hasSupportCategory"),   # grupo de soporte → categoría
-    ("hasTypeInc",       "hasTechnician"),         # tipo de incidencia → técnico
-    ("int_hasCustomer",  "hasSupportGroup"),       # empresa → grupo de soporte
-    ("hasSupportGroup",  "hasTechnician"),         # grupo de soporte → técnico
-]
-
 # ---------------------------------------------------------------------------
-# Hiperparámetros KGE (DistMult)
+# Hiperparámetros KGE
 # ---------------------------------------------------------------------------
 
 EMBEDDING_DIM  = 256
-N_EPOCHS       = 600
-BATCH_SIZE     = 2048
+N_EPOCHS       = 100
+BATCH_SIZE     = 5500
 LEARNING_RATE  = 1e-3
-NEG_PER_POS    = 128      # 128 para NSSA (escala con negativos), 50 default A100, 10 fallback CPU
+NEG_PER_POS    = 10 
 RANDOM_SEED    = 42
+
+LR_FACTOR      = 0.5
+LR_PATIENCE    = 10
+LR_MIN         = 1e-5
+
+BATCH_SIZE_EVAL = 1024
+SLICE_SIZE      = 5000
+
+# t-SNE: muestreo estratificado por tipo (hasta N entidades de cada tipo).
+# Coste aproximado del t-SNE en función del total muestreado (≈ 11 tipos):
+#   n_per_type=500   →   ~3-5k puntos   →  1-2 min
+#   n_per_type=2000  →  ~15-20k puntos  →  5-10 min
+#   n_per_type=5000  →  ~40-50k puntos  →  20-40 min
+TSNE_N_PER_TYPE = 2000
+
+# Early stopping (PyKEEN EarlyStopper). Activado en phase2.
+EARLY_STOP_FREQUENCY      = 1         # evaluar en validación cada N épocas
+EARLY_STOP_PATIENCE       = 3         # nº de evaluaciones consecutivas sin mejora antes de parar
+EARLY_STOP_RELATIVE_DELTA = 0.002     # mejora relativa mínima para considerar progreso
+EARLY_STOP_METRIC         = "inverse_harmonic_mean_rank"  # MRR (mayor = mejor)
 
 TRAIN_RATIO    = 0.80
 VALID_RATIO    = 0.10
@@ -140,7 +127,4 @@ W_CBR   = 0.3  # peso del ranking CBR  (W_KGE + W_CBR debe sumar 1)
 # Evaluación
 # ---------------------------------------------------------------------------
 
-EVAL_SAMPLE_N   = 200          # nº de Q&A a evaluar en phase6
-HIT_K_VALUES    = [1, 3, 10]   # valores de k para Hit@k
 TOP_K_PREDICT   = 10           # top-k en link prediction (phase3)
-TOP_K_SIMILAR   = 5            # incidencias similares en CBR (phase5)

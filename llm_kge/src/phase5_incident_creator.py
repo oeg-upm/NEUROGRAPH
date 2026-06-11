@@ -27,12 +27,13 @@ Desde el pipeline:
 import argparse
 import json
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import config as cfg
-from rule_engine_pyclause import RuleEnginePyClause as RuleEngine
+from utils.rule_engine import RuleEnginePyClause as RuleEngine
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,11 @@ INCIDENT_PROPS = [
     "hasSupportTeam",         # 7: equipo de soporte
     "hasStateIncident",       # 8: estado
     "hasExternalTechnician",  # 9: técnico externo (opcional)
+    "hasIntervention",        # 10: intervenciones (multi-valor — cascada REGLA→KGE+CBR)
 ]
+
+# Campos del wizard que admiten múltiples valores (multi-selección en el menú).
+MULTI_VALUE_PROPS = {"hasIntervention"}
 
 _PROP_LABELS = {
     "int_hasCustomer":       "cliente",
@@ -61,6 +66,10 @@ _PROP_LABELS = {
     "hasSupportTeam":        "equipo de soporte",
     "hasStateIncident":      "estado",
     "hasExternalTechnician": "técnico externo",
+    "hasIntervention":       "intervenciones",
+    # Auto-rellenados al final (no entran en el bucle de recomendación)
+    "createdOn":             "fecha de creación",
+    "hasDedicationTimeMin":  "tiempo dedicado (min)",
 }
 
 
@@ -123,20 +132,77 @@ def extract_from_free_text(text: str, incidents_map: dict) -> dict[str, str]:
 # CBR: búsqueda de incidencias históricas similares
 # ---------------------------------------------------------------------------
 
-def find_matching_incidents(known_props: dict, incidents_map: dict) -> list[str]:
+def build_incidents_index(incidents_map: dict) -> dict[str, dict[str, set]]:
+    """
+    Construye un índice inverso {prop: {value: set(inc_ids)}} a partir de
+    incidents_map = {inc_id: {prop: [values]}}. Permite que
+    find_matching_incidents pase de un O(N·P) por consulta a una unión de
+    conjuntos (≈100× sobre un pool de cientos de miles de incidencias).
+
+    Construir el índice es O(N·P) una sola vez; luego cada consulta es
+    proporcional al nº de incidencias que comparten algún valor con
+    known_props, no al pool completo.
+    """
+    index: dict[str, dict[str, set]] = {}
+    for inc_id, props in incidents_map.items():
+        for prop, values in props.items():
+            if not values:
+                continue
+            bucket = index.setdefault(prop, {})
+            if isinstance(values, list):
+                for v in values:
+                    bucket.setdefault(v, set()).add(inc_id)
+            else:
+                bucket.setdefault(values, set()).add(inc_id)
+    return index
+
+
+def find_matching_incidents(
+    known_props: dict,
+    incidents_map: dict,
+    index: dict | None = None,
+    exclude_id: str | None = None,
+) -> list[str]:
     """
     Devuelve las incident_ids cuyas propiedades coinciden con known_props.
     Empieza exigiendo que TODAS las propiedades conocidas coincidan; si
     obtiene menos de 3 resultados, relaja el umbral en 1 hasta mínimo 1.
+
+    Si se pasa `index` (construido con build_incidents_index) se usa la ruta
+    rápida basada en intersección de conjuntos; en caso contrario hace el
+    barrido O(N) sobre `incidents_map`.
+    `exclude_id` permite descartar una incidencia (típicamente la objetivo
+    en evaluación) sin tener que copiar el pool.
     """
+    from collections import Counter
+
     filled = {k: v for k, v in known_props.items() if v is not None}
     if not filled:
         return []
+
+    # --- Ruta rápida con índice inverso -----------------------------------
+    if index is not None:
+        counter: Counter = Counter()
+        for k, v in filled.items():
+            ids = index.get(k, {}).get(v)
+            if ids:
+                counter.update(ids)
+        if exclude_id is not None:
+            counter.pop(exclude_id, None)
+        matches: list[str] = []
+        for threshold in range(len(filled), 0, -1):
+            matches = [iid for iid, c in counter.items() if c >= threshold]
+            if len(matches) >= 3:
+                return matches
+        return matches
+
+    # --- Ruta original (escaneo lineal) -----------------------------------
     matches = []
     for threshold in range(len(filled), 0, -1):
         matches = [
             inc_id for inc_id, props in incidents_map.items()
-            if sum(1 for k, v in filled.items() if v in props.get(k, [])) >= threshold
+            if inc_id != exclude_id
+            and sum(1 for k, v in filled.items() if v in props.get(k, [])) >= threshold
         ]
         if len(matches) >= 3:
             return matches
@@ -157,6 +223,8 @@ def recommend_property(
     rrf_k: float = cfg.RRF_K,
     w_kge: float = cfg.W_KGE,
     w_cbr: float = cfg.W_CBR,
+    index: dict | None = None,
+    exclude_id: str | None = None,
 ) -> tuple[list[tuple[str, int, float, float]], int]:
     """
     Genera recomendaciones para target_prop combinando CBR + KGE mediante
@@ -173,24 +241,31 @@ def recommend_property(
     Devuelve (lista de (entity_label, cbr_freq, kge_score, wrrf_score), n_proxies)
     ordenada por WRRF DESC.
     """
-    from phase3_link_prediction import predict_tails, predict_heads
+    from phase3_link_prediction import predict_tails_batch, predict_heads
 
-    proxies = find_matching_incidents(known_props, incidents_map)
+    proxies = find_matching_incidents(known_props, incidents_map,
+                                      index=index, exclude_id=exclude_id)
 
     if not proxies:
         first_prop = next((k for k, v in known_props.items() if v is not None), None)
         if first_prop:
             heads = predict_heads(model, factory, first_prop,
                                   known_props[first_prop], top_k=20)
-            proxies = [h for h, _ in heads if h in incidents_map]
+            proxies = [h for h, _ in heads
+                       if h in incidents_map and h != exclude_id]
 
     if not proxies:
         return [], 0
 
     n_proxies = len(proxies)
+    proxies_batch = proxies[:30]
+    # Una sola pasada batched por el KGE para los 30 proxies.
+    per_proxy_topk = predict_tails_batch(model, factory, proxies_batch,
+                                         target_prop, top_k)
+
     scores: dict[str, list[float]] = {}
-    for proxy in proxies[:30]:
-        for entity, score in predict_tails(model, factory, proxy, target_prop, top_k):
+    for ranked in per_proxy_topk:
+        for entity, score in ranked:
             scores.setdefault(entity, []).append(score)
 
     aggregated = [
@@ -225,27 +300,34 @@ def recommend_property(
 def _build_incidents_map_from_tsv() -> dict:
     """
     Construye incidents_map = {incident_id: {predicate: [values]}} leyendo
-    train.tsv + valid.tsv directamente, sin pasar por rdflib.
+    cfg.TRAIN_TSV (data/triples/train.tsv) directamente, sin pasar por rdflib.
 
     Solo incluye triples cuya cabeza sea una incidencia (empieza por 'incident_')
     y cuya relación sea una de las propiedades relevantes (INCIDENT_PROPS).
+
+    El pool CBR usa únicamente train.tsv (el 95% de entrenamiento). Las
+    incidencias de test_eval.ttl se mantienen fuera para no contaminar las
+    métricas de la fase 6.
     """
+    if not cfg.TRAIN_TSV.exists():
+        raise FileNotFoundError(
+            f"No se encontró {cfg.TRAIN_TSV}. "
+            "Ejecuta primero la fase 1 del pipeline."
+        )
+
     prop_set = set(INCIDENT_PROPS)
     incidents: dict = {}
-    for tsv_path in (cfg.TRAIN_TSV, cfg.VALID_TSV):
-        if not tsv_path.exists():
-            continue
-        with open(tsv_path, "r", encoding="utf-8") as fh:
-            for line in fh:
-                parts = line.rstrip("\n").split("\t")
-                if len(parts) != 3:
-                    continue
-                head, rel, tail = parts
-                if not head.startswith("incident_"):
-                    continue
-                if rel not in prop_set:
-                    continue
-                incidents.setdefault(head, {}).setdefault(rel, []).append(tail)
+    with open(cfg.TRAIN_TSV, "r", encoding="utf-8") as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) != 3:
+                continue
+            head, rel, tail = parts
+            if not head.startswith("incident_"):
+                continue
+            if rel not in prop_set:
+                continue
+            incidents.setdefault(head, {}).setdefault(rel, []).append(tail)
     return incidents
 
 
@@ -269,7 +351,7 @@ class IncidentCreatorSession:
         kge_model_name: str = 'TransE',
         use_llm: bool = True,
         llm_model_name: str = cfg.DEFAULT_MODEL,
-        top_k: int = 5,
+        top_k: int = 10,
     ):
         self.kge_model_name  = kge_model_name
         self.llm_model_name  = llm_model_name
@@ -281,8 +363,8 @@ class IncidentCreatorSession:
         print("  Cargando recursos ...")
         print(f"{'='*60}")
 
-        # Mapa de incidencias históricas (desde TSV, sin rdflib)
-        print(f"  [1/4] Cargando incidencias desde TSV ...")
+        # Mapa de incidencias históricas (desde data/triples/train.tsv)
+        print(f"  [1/4] Cargando incidencias desde train.tsv ...")
         self.incidents_map = _build_incidents_map_from_tsv()
         print(f"        {len(self.incidents_map):,} incidencias históricas cargadas.")
 
@@ -295,14 +377,17 @@ class IncidentCreatorSession:
         # Modelo KGE
         from phase3_link_prediction import load_model_by_name
         print(f"  [3/4] Cargando modelo KGE: {kge_model_name} ...")
-        self.model, self.factory = load_model_by_name(kge_model_name)
+        # CPU: en create_incident la GPU la ocupa vLLM (LLM). Compartirla rompe
+        # score_t con el fallo NVML del allocator de PyTorch. La evaluación del
+        # sistema (phase6) sigue usando GPU vía el device por defecto.
+        self.model, self.factory = load_model_by_name(kge_model_name, device="cpu")
 
         # LLM (opcional)
         if use_llm:
             print(f"  [4/4] Conectando con LLM: {llm_model_name} ...")
             try:
                 from openai import OpenAI
-                from phase4_llm_inference import KGEAugmentedLLM
+                from utils.llm_inference import KGEAugmentedLLM
                 self._openai_client = OpenAI(
                     base_url=cfg.VLLM_BASE_URL, api_key="EMPTY"
                 )
@@ -327,7 +412,7 @@ class IncidentCreatorSession:
     def _llm_ask(self, prop: str, recs: list, incident: dict) -> str:
         """Genera una pregunta natural invitando al usuario a elegir entre las
         opciones que el KGE ha recomendado. NO menciona valores fuera de recs."""
-        from phase4_llm_inference import verbalize_props
+        from utils.llm_inference import verbalize_props
         label = _PROP_LABELS.get(prop, prop)
 
         filled = {k: v for k, v in incident.items() if v is not None}
@@ -390,15 +475,136 @@ class IncidentCreatorSession:
         return raw if raw in known_ids else None
 
     # ------------------------------------------------------------------
+    # Recolección de campos multi-valor (ej. hasIntervention)
+    # ------------------------------------------------------------------
+
+    def _collect_multi_value(
+        self,
+        prop: str,
+        label: str,
+        incident: dict,
+        sources: dict,
+    ) -> str | None:
+        """
+        Recoge múltiples valores para un campo multi-valor.
+        Cascada REGLA → KGE+CBR. La regla aporta UN candidato (que se mezcla
+        con las recomendaciones KGE+CBR como sugerencia preferente). El
+        usuario puede seleccionar varias opciones por número o ID separados
+        por coma (p.ej. "1,3" o "intervention_x,intervention_y").
+
+        Retorna "__exit__" si el usuario quiere salir, None en otro caso.
+        """
+        # 1. Intento de regla (si aplica) — su valor se promueve a primera opción
+        rule_hit = self.rule_engine.query(incident, prop)
+        rule_val = rule_hit["value"] if rule_hit else None
+
+        # 2. Recomendaciones KGE+CBR
+        recs, n_proxies = recommend_property(
+            known_props=incident,
+            target_prop=prop,
+            incidents_map=self.incidents_map,
+            model=self.model,
+            factory=self.factory,
+            top_k=self.top_k,
+        )
+
+        # 3. Construir lista combinada de opciones a mostrar
+        #    (regla primero si existe y no está ya en recs)
+        rec_ids = [ent for ent, *_ in recs]
+        if rule_val and rule_val not in rec_ids:
+            options = [(rule_val, "RULE", rule_hit)] + [(e, "KGE", r) for e, r in zip(rec_ids, recs)]
+        else:
+            options = [(e, "KGE", r) for e, r in zip(rec_ids, recs)]
+
+        # 4. Mostrar opciones
+        print(f"\n[{label}] (multi-valor, puede haber 0, 1 o varias)")
+        if options:
+            print("Opciones recomendadas:")
+            for i, (ent, src, info) in enumerate(options, 1):
+                if src == "RULE":
+                    rid  = info["rule_id"]
+                    conf = info["confidence"]
+                    print(f"  {i}. {ent}  [REGLA {rid}  conf={conf:.4f}]")
+                else:
+                    _, freq, score, wrrf = info
+                    print(f"  {i}. {ent}  (freq: {freq}, score: {score:.3f}, WRRF: {wrrf:.5f})")
+            print("Responde con números o IDs separados por coma (p.ej. '1,3' o 'id1,id2').")
+        else:
+            print("[KGE] Sin recomendaciones. Escribe los IDs separados por coma.")
+        print("(Enter/skip = ninguna, exit = salir)")
+
+        try:
+            user_input = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return "__exit__"
+
+        cmd = user_input.lower()
+        if cmd in ("salir", "exit", "quit"):
+            return "__exit__"
+        if cmd in ("", "saltar", "skip"):
+            print(f"  ⟳ {label} dejado sin rellenar.")
+            return None
+
+        # 5. Parsear tokens separados por coma → lista de valores
+        tokens = [t.strip() for t in user_input.split(",") if t.strip()]
+        chosen: list[str] = []
+        used_rule  = False
+        used_kge   = False
+        used_user  = False
+        for tok in tokens:
+            if tok.isdigit():
+                idx = int(tok) - 1
+                if 0 <= idx < len(options):
+                    ent, src, _ = options[idx]
+                    chosen.append(ent)
+                    if src == "RULE":
+                        used_rule = True
+                    else:
+                        used_kge = True
+                else:
+                    print(f"  [!] Número fuera de rango: {tok}")
+            else:
+                chosen.append(tok)
+                if tok in rec_ids or tok == rule_val:
+                    used_kge = used_kge or (tok in rec_ids)
+                    used_rule = used_rule or (tok == rule_val)
+                else:
+                    used_user = True
+
+        if not chosen:
+            print(f"  [!] No se reconoció ningún valor. {label} dejado sin rellenar.")
+            return None
+
+        # Determinar fuente combinada para la trazabilidad
+        srcs = []
+        if used_rule: srcs.append("RULE")
+        if used_kge:  srcs.append("KGE")
+        if used_user: srcs.append("USUARIO")
+        src_type = "+".join(srcs) if srcs else "USUARIO"
+
+        incident[prop] = chosen
+        sources[prop] = {
+            "value":      chosen,
+            "source":     src_type,
+            "n_proxies":  n_proxies,
+            "n_selected": len(chosen),
+        }
+        print(f"  ✓ {label} = {chosen}  [{src_type}]  "
+              f"({len(chosen)} seleccionada{'s' if len(chosen) > 1 else ''})")
+        return None
+
+    # ------------------------------------------------------------------
     # Loop principal
     # ------------------------------------------------------------------
 
     def run(self) -> dict:
         """Ejecuta la sesión. Devuelve el dict de la incidencia completada."""
-        incident: dict[str, str | None] = {p: None for p in INCIDENT_PROPS}
+        # Los campos multi-valor (hasIntervention) almacenan lista; el resto, string.
+        incident: dict[str, str | list[str] | None] = {p: None for p in INCIDENT_PROPS}
         # Trazabilidad: {prop → {"value", "source", ...}}
         sources: dict[str, dict] = {}
         self._sources = sources
+        self._session_start = time.monotonic()
 
         print("=== Creación de nueva incidencia ===\n")
 
@@ -436,6 +642,7 @@ class IncidentCreatorSession:
         recs: list = []
         n_proxies: int = 0
         last_question: str = ""
+        rejected_rule_prop = None  # propiedad cuya regla ya rechazó el usuario
 
         while prop_idx < total:
             prop  = INCIDENT_PROPS[prop_idx]
@@ -447,8 +654,19 @@ class IncidentCreatorSession:
                 recs = []
                 continue
 
+            # Rama multi-valor (ej. hasIntervention): recolecta varios IDs
+            # con cascada REGLA → KGE+CBR en un único paso.
+            if prop in MULTI_VALUE_PROPS:
+                result = self._collect_multi_value(prop, label, incident, sources)
+                if result == "__exit__":
+                    print("\n[Salida — guardando lo completado]")
+                    break
+                prop_idx += 1
+                recs = []
+                continue
+
             # Capa 3 — Inferencia en cascada: REGLA → KGE+CBR
-            if not recs:
+            if not recs and rejected_rule_prop != prop:
                 rule_hit = self.rule_engine.query(incident, prop)
                 if rule_hit:
                     val  = rule_hit["value"]
@@ -469,16 +687,11 @@ class IncidentCreatorSession:
                     if cmd in ("saltar", "skip"):
                         prop_idx += 1; recs = []; continue
                     if cmd in ("n", "no"):
-                        # Rechazar la regla → calcular KGE+CBR y continuar
+                        # Rechazar la regla → no volver a mostrarla; el cálculo
+                        # KGE+CBR se hace en el bloque siguiente (una sola vez).
                         print("  [Regla rechazada. Calculando recomendaciones KGE+CBR ...]")
-                        recs, n_proxies = recommend_property(
-                            known_props=incident,
-                            target_prop=prop,
-                            incidents_map=self.incidents_map,
-                            model=self.model,
-                            factory=self.factory,
-                            top_k=self.top_k,
-                        )
+                        rejected_rule_prop = prop
+                        recs = []
                         continue
                     if cmd in ("s", "si", "y", "yes", ""):
                         incident[prop] = val
@@ -663,13 +876,38 @@ class IncidentCreatorSession:
 
     def _finish(self, incident: dict) -> None:
         """Verbaliza, genera resumen LLM y guarda en JSONL."""
-        from phase4_llm_inference import verbalize_props
+        from utils.llm_inference import verbalize_props
+
+        # ------------------------------------------------------------------
+        # Auto-completado de campos finales (no entran en el wizard):
+        #   - createdOn            → fecha de hoy (DD/MM/YYYY)
+        #   - hasDedicationTimeMin → input numérico del usuario (minutos)
+        # Las intervenciones (hasIntervention) se gestionarán al final en
+        # una iteración futura, recomendando hasSupportTeam/hasTechnician
+        # de cada intervención asociada.
+        # ------------------------------------------------------------------
+        _sources = getattr(self, "_sources", {})
+
+        today_str = datetime.now().strftime("%d/%m/%Y")
+        incident["createdOn"] = today_str
+        _sources["createdOn"] = {"value": today_str, "source": "AUTO"}
+        print(f"\n[AUTO] Fecha de creación = {today_str}")
+
+        start = getattr(self, "_session_start", None)
+        elapsed_sec = (time.monotonic() - start) if start is not None else 0.0
+        dedication_min = max(1, round(elapsed_sec / 60)) if elapsed_sec > 0 else 0
+        incident["hasDedicationTimeMin"] = dedication_min
+        _sources["hasDedicationTimeMin"] = {"value": dedication_min, "source": "AUTO"}
+        print(f"[AUTO] Tiempo dedicado = {dedication_min} min")
 
         filled = {k: v for k, v in incident.items() if v is not None}
         n_filled = len(filled)
 
+        # Total de campos = INCIDENT_PROPS (recomendados) + 2 (auto-completados)
+        total_fields = len(INCIDENT_PROPS) + 2
+
         print(f"\n{'='*60}")
-        print(f"  Incidencia completada ({n_filled}/{len(INCIDENT_PROPS)} campos)")
+        print(f"  Incidencia completada ({n_filled}/{total_fields} campos)")
         print(f"{'='*60}")
 
         if not filled:
@@ -735,7 +973,7 @@ def run(
     kge_model_name: str = 'TransE',
     use_llm: bool = True,
     llm_model_name: str = cfg.DEFAULT_MODEL,
-    top_k: int = 5,
+    top_k: int = 10,
 ) -> dict:
     session = IncidentCreatorSession(
         kge_model_name=kge_model_name,
@@ -756,8 +994,8 @@ if __name__ == "__main__":
                         help="Desactivar LLM (menú numerado clásico)")
     parser.add_argument("--model", default=cfg.DEFAULT_MODEL,
                         help=f"Modelo LLM (default: {cfg.DEFAULT_MODEL})")
-    parser.add_argument("--top-k", type=int, default=5,
-                        help="Recomendaciones KGE por propiedad (default: 5)")
+    parser.add_argument("--top-k", type=int, default=10,
+                        help="Recomendaciones KGE por propiedad (default: 10)")
     args = parser.parse_args()
 
     run(

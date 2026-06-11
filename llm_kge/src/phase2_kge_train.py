@@ -1,22 +1,28 @@
 """
 Fase 2 — Entrenamiento de modelos KGE con PyKEEN.
 
-Modelos soportados: TransE, DistMult, ComplEx (y cualquier otro de PyKEEN).
+Modelos soportados:
+  Traslacionales (buenos para jerarquías):
+    TransE  — línea base traslacional
+    RotatE  — rotaciones en espacio complejo, captura transitividad y asimetría
+    TransH  — proyección en hiperplanos por relación
+    HAKE    — coordenadas polares, diseñado específicamente para jerarquías
+  Bilineales:
+    DistMult — producto escalar, simétrico
+    ComplEx  — espacio complejo, modela asimetría
 
 Requisito previo: ejecutar phase1_triples.py para generar los TSV.
 
-Salida por modelo (ej. DistMult):
-  out/models/distmult/           (modelo PyKEEN completo)
-  out/embeddings/distmult/entity_embeddings.pt
-  out/embeddings/distmult/relation_embeddings.pt
-  out/embeddings/distmult/entity_to_id.json
-  out/embeddings/distmult/relation_to_id.json
+Salida por modelo (ej. RotatE):
+  out/models/rotate/           (modelo PyKEEN completo)
+  out/embeddings/rotate/entity_embeddings.pt
+  out/embeddings/rotate/relation_embeddings.pt
 
 Uso:
   python src/phase2_kge_train.py                        # DistMult (por defecto)
-  python src/phase2_kge_train.py --model TransE
-  python src/phase2_kge_train.py --model ComplEx
-  python src/phase2_kge_train.py --all-models           # entrena los 3 secuencialmente
+  python src/phase2_kge_train.py --model RotatE
+  python src/phase2_kge_train.py --model HAKE
+  python src/phase2_kge_train.py --all-models           # entrena todos secuencialmente
   python src/phase2_kge_train.py --epochs N --dim D --device cpu|cuda
 """
 
@@ -24,9 +30,24 @@ import argparse
 import csv
 import json
 import sys
+import warnings
+from datetime import datetime
 from pathlib import Path
 
 import torch
+
+import os
+os.environ["PYKEEN_NO_CUDA_OOM_DETECTION"] = "1"  # antes de importar pykeen
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+# Silenciar el warning de PyTorch sobre `scheduler.step(epoch=...)`.
+# PyKEEN lo llama así por compatibilidad; PyTorch lo desaprueba pero sigue
+# funcionando. El aviso ensucia la barra tqdm cada época.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*epoch parameter in `scheduler\.step\(\)`.*",
+    category=UserWarning,
+)
 
 sys.path.insert(0, str(Path(__file__).parent))
 import config as cfg
@@ -35,6 +56,67 @@ import config as cfg
 # ---------------------------------------------------------------------------
 # Entrenamiento de un modelo
 # ---------------------------------------------------------------------------
+
+def _model_config(model_lower: str, dim: int, margin: float) -> dict:
+    """
+    Devuelve la configuración de loss, sampler y model_kwargs para cada modelo.
+
+    Modelos traslacionales/rotacionales: NSSALoss + bernoulli.
+      - Capturan asimetría y transitividad; clave para relaciones jerárquicas.
+      - bernoulli pondera negativos según frecuencia de cabeza/cola (Bernoulli trick).
+    Modelos bilineales: BCEWithLogitsLoss + basic.
+      - DistMult/ComplEx funcionan mejor con BCE y muestreo uniforme.
+    HAKE: NSSALoss + basic (modular + fase; bernoulli añade ruido en el módulo).
+    ConvE: convolucional. Requisitos especiales de PyKEEN:
+      - needs_inverse: el TriplesFactory debe crearse con create_inverse_triples=True
+        (ConvE solo puntúa colas; predice cabezas vía relaciones inversas).
+      - no_sub_batch: las capas BatchNorm impiden el sub-batching, así que no se
+        puede pasar sub_batch_size (de lo contrario: SubBatchingNotSupportedError).
+    """
+    nssa = dict(loss="NSSALoss",
+                loss_kwargs=dict(margin=margin, adversarial_temperature=1.0),
+                sampler="bernoulli",
+                eval_batch_size=32)
+    bce  = dict(loss="BCEWithLogitsLoss",
+                loss_kwargs={},
+                sampler="basic",
+                eval_batch_size=32)
+
+    configs = {
+        "transe":   {**nssa, "model_kwargs": dict(embedding_dim=dim, scoring_fct_norm=1)},
+        # RotatE: embeddings complejos internamente; dim es la dimensión total real
+        "rotate":   {**nssa, "model_kwargs": dict(embedding_dim=dim)},
+        # TransH: proyecta entidades en hiperplanos específicos por relación
+        "transh":   {**nssa, "model_kwargs": dict(embedding_dim=dim)},
+        # HAKE: módulo captura nivel jerárquico, fase captura diferencia semántica
+        "hake":     {**nssa, "model_kwargs": dict(embedding_dim=dim)},
+        "distmult": {**nssa,  "model_kwargs": dict(embedding_dim=dim)},
+        # ComplEx:
+        "complex":  {**nssa,  "model_kwargs": dict(embedding_dim=dim)},
+        # ConvE: convolucional 2D. dim debe ser factorizable como alto×ancho
+        # (PyKEEN deriva la rejilla; p.ej. 256 -> 16x16). Necesita inverse
+        # triples y no admite sub-batching (ver flags abajo).
+        "conve":    {**bce, "model_kwargs": dict(embedding_dim=dim),
+                     "needs_inverse": True, "no_sub_batch": True},
+    }
+    if model_lower not in configs:
+        # Fallback genérico para cualquier otro modelo de PyKEEN
+        return {**bce, "model_kwargs": dict(embedding_dim=dim)}
+    return configs[model_lower]
+
+
+# ---------------------------------------------------------------------------
+# Plots de diagnóstico
+# ---------------------------------------------------------------------------
+# Las funciones de plot viven en phase2_plots.py. Aquí solo se importan.
+#   _plot_loss_curve       curva de pérdida
+#   _plot_tsne_embeddings  t-SNE 2D estratificado por tipo (balanceado)
+# Al final de train() se generan loss + t-SNE estratificado 2D. El t-SNE 3D
+# estratificado y el aleatorio se dejan para phase2_plots.py vía CLI.
+# ---------------------------------------------------------------------------
+
+from phase2_plots import _plot_loss_curve, _plot_tsne_embeddings
+
 
 def train(
     model_name:      str   = 'DistMult',
@@ -53,20 +135,26 @@ def train(
     print(f"FASE 2 — Entrenamiento {model_name} con PyKEEN")
     print("=" * 60)
 
-    # Verificar que existen los TSV
     if not cfg.TRAIN_TSV.exists():
         raise FileNotFoundError(
             f"No encontrado: {cfg.TRAIN_TSV}\n"
             "Ejecuta primero:  python src/phase1_triples.py"
         )
 
+    # Algunos modelos (ConvE) requieren relaciones inversas. Se decide aquí,
+    # antes de cargar/particionar, porque create_inverse_triples es propiedad
+    # del TriplesFactory y se propaga a los splits.
+    model_lower = model_name.lower()
+    mcfg = _model_config(model_lower, dim, margin)
+    needs_inverse = mcfg.get("needs_inverse", False)
+    no_sub_batch  = mcfg.get("no_sub_batch", False)
+
     print(f"[1/3] Cargando tripletas desde {cfg.TRAIN_TSV} ...")
-    # Cargar TODAS las tripletas del train.tsv (que contiene todo el grafo)
-    # PyKEEN hará el split internamente, garantizando cobertura de vocabulario
-    full = TriplesFactory.from_path(cfg.TRAIN_TSV)
+    full = TriplesFactory.from_path(cfg.TRAIN_TSV, create_inverse_triples=needs_inverse)
+    if needs_inverse:
+        print(f"      (create_inverse_triples=True — requerido por {model_name})")
     print(f"      Total de tripletas cargadas: {full.num_triples:,}")
 
-    # Split con garantía de PyKEEN: todas las entidades de valid/test están en train
     training, validation, testing = full.split(
         ratios=[cfg.TRAIN_RATIO, cfg.VALID_RATIO, 1.0 - cfg.TRAIN_RATIO - cfg.VALID_RATIO],
         random_state=cfg.RANDOM_SEED,
@@ -76,41 +164,20 @@ def train(
     print(f"      Train / Valid / Test: "
           f"{training.num_triples:,} / {validation.num_triples:,} / {testing.num_triples:,}")
 
-    # Configuración por modelo:
-    # - TransE:   MarginRankingLoss + sLCWA + norm L2 + bernoulli (más negativos)
-    # - DistMult: BCEWithLogitsLoss + sLCWA            (bilineal, funciona bien con BCE)
-    # - ComplEx:  BCEWithLogitsLoss + sLCWA            (igual que DistMult)
-    model_lower = model_name.lower()
-
-    if model_lower == "transe":
-        loss            = "NSSALoss"
-        loss_kwargs     = dict(margin=margin, adversarial_temperature=1.0)
-        model_kwargs    = dict(embedding_dim=dim, scoring_fct_norm=1)
-        training_loop   = "sLCWA"
-        transe_num_negs = cfg.NEG_PER_POS
-        transe_sampler  = "bernoulli"
-        train_batch     = batch
-        train_slice     = None
-    else:
-        loss            = "BCEWithLogitsLoss"
-        loss_kwargs     = {}
-        model_kwargs    = dict(embedding_dim=dim)
-        training_loop   = "sLCWA"
-        transe_num_negs = cfg.NEG_PER_POS
-        transe_sampler  = "basic"
-        train_batch     = batch
-        train_slice     = None
-
-    # ComplEx usa embeddings complejos (dim real × 2) → necesita menos RAM en evaluación
+    loss          = mcfg["loss"]
+    loss_kwargs   = mcfg["loss_kwargs"]
+    model_kwargs  = mcfg["model_kwargs"]
+    sampler       = mcfg["sampler"]
     if eval_batch_size is None:
-        eval_batch_size = 8 if model_lower == "complex" else 32
+        eval_batch_size = mcfg["eval_batch_size"]
 
     print(f"\n[2/3] Entrenando {model_name}  "
           f"(dim={dim}, epochs={epochs}, loss={loss}, "
-          f"loop={training_loop}, device={device}, eval_batch={eval_batch_size}) ...")
+          f"sampler={sampler}, device={device}, eval_batch={cfg.BATCH_SIZE_EVAL}) ...")
+    print(f"      Early stopping: metric={cfg.EARLY_STOP_METRIC}  "
+          f"freq={cfg.EARLY_STOP_FREQUENCY}  patience={cfg.EARLY_STOP_PATIENCE}  "
+          f"delta={cfg.EARLY_STOP_RELATIVE_DELTA}")
 
-    # Construir kwargs de pipeline dinámicamente
-    # LCWA no permite negative_sampler, mientras que sLCWA sí
     pipeline_kwargs = dict(
         training=training,
         validation=validation,
@@ -119,28 +186,47 @@ def train(
         model_kwargs=model_kwargs,
         optimizer="Adam",
         optimizer_kwargs=dict(lr=lr),
-        training_loop=training_loop,
+        # Scheduler: reduce LR de forma suave (coseno) hasta eta_min.
+        # ReduceLROnPlateau no encaja porque PyKEEN solo llama step(epoch)
+        # y ese scheduler necesita la métrica de validación (que requiere
+        # early stopper activo).
+        lr_scheduler="CosineAnnealingLR",
+        lr_scheduler_kwargs=dict(
+            T_max=epochs,
+            eta_min=cfg.LR_MIN,
+        ),
+        training_loop="sLCWA",
         training_loop_kwargs=dict(automatic_memory_optimization=False),
-        training_kwargs={k: v for k, v in dict(
+        # ConvE (no_sub_batch) no admite sub_batch_size por sus capas BatchNorm.
+        # Para esos modelos se omite y se entrena con el batch_size completo.
+        training_kwargs=dict(
             num_epochs=epochs,
-            batch_size=train_batch,
-            sub_batch_size=train_batch,
-            slice_size=train_slice,
-        ).items() if v is not None},
+            batch_size=batch,
+            **({} if no_sub_batch else dict(sub_batch_size=2048)),
+        ),
         loss=loss,
         loss_kwargs=loss_kwargs if loss_kwargs else None,
+        negative_sampler=sampler,
+        negative_sampler_kwargs=dict(num_negs_per_pos=cfg.NEG_PER_POS),
         evaluator="RankBasedEvaluator",
         evaluator_kwargs=dict(filtered=True),
-        # Entrenamiento en GPU, evaluación en CPU para evitar OOM de GPU.
-        # ComplEx usa batch pequeño para evitar OOM de RAM (embeddings doble tamaño).
-        evaluation_kwargs=dict(batch_size=eval_batch_size, device="cpu"),
+        evaluation_kwargs=dict(
+            batch_size=cfg.BATCH_SIZE_EVAL,
+            slice_size=cfg.SLICE_SIZE,
+        ),
+        # Early stopping desactivado temporalmente (bug NVML en evals
+        # intermedias dentro del contenedor de Jupyter).
+        # stopper="early",
+        # stopper_kwargs=dict(
+        #    frequency=cfg.EARLY_STOP_FREQUENCY,
+        #    patience=cfg.EARLY_STOP_PATIENCE,
+        #    relative_delta=cfg.EARLY_STOP_RELATIVE_DELTA,
+        #    metric=cfg.EARLY_STOP_METRIC,
+        #    evaluation_slice_size=cfg.SLICE_SIZE,
+        # ),
         random_seed=cfg.RANDOM_SEED,
         device=device,
     )
-
-    if training_loop != "LCWA":
-        pipeline_kwargs["negative_sampler"]        = transe_sampler
-        pipeline_kwargs["negative_sampler_kwargs"] = dict(num_negs_per_pos=transe_num_negs)
 
     result = pipeline(**pipeline_kwargs)
     print(f"\n[3/3] Guardando modelo y embeddings ...")
@@ -168,14 +254,38 @@ def train(
     # así que se guardan en MAPS_DIR (ya generados por fase 1)
     # No es necesario volver a guardarlos aquí
 
+    # Plots de diagnóstico: curva de loss + t-SNE estratificado (balanceado por
+    # tipo, la vista útil para ver si el KGE separa tipos). Cada figura lleva en
+    # el nombre <modelo>_<kind>_<timestamp> para que los entrenamientos
+    # sucesivos no se sobreescriban. El t-SNE 3D estratificado (y el aleatorio,
+    # si se quiere) se generan aparte con `python src/phase2_plots.py --kge-model <X>`.
+    plot_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_figures_dir = cfg.OUT_DIR / "figures" / model_name.lower()
+    _plot_loss_curve(result, model_name, out_figures_dir, plot_ts)
+    _plot_tsne_embeddings(
+        entity_embs, training, model_name, out_figures_dir, plot_ts,
+        n_per_type=cfg.TSNE_N_PER_TYPE,
+    )
+
     # Resumen de métricas de test
     metrics = result.metric_results.to_dict()
     hits = metrics.get("both", {}).get("realistic", {})
     print(f"\n--- Métricas en test set ({model_name}) ---")
-    for k in ("hits_at_1", "hits_at_3", "hits_at_10", "mean_reciprocal_rank"):
+    for k in ("hits_at_1", "hits_at_3", "hits_at_10", "inverse_harmonic_mean_rank"):
         v = hits.get(k)
         if v is not None:
-            print(f"  {k}: {v:.4f}")
+            label = "mrr" if k == "inverse_harmonic_mean_rank" else k
+            print(f"  {label}: {v:.4f}")
+
+    # Añadir fila al control de versiones (CSV/JSON acumulativos)
+    _append_to_comparison_table(
+        model_name=model_name,
+        result=result,
+        dim=dim,
+        epochs=epochs,
+        lr=lr,
+        device=device,
+    )
 
     print(f"\n✓ Fase 2 completada para {model_name}.")
     return result
@@ -192,7 +302,14 @@ def train_all_models(
     lr:     float = cfg.LEARNING_RATE,
     device: str   = "cpu",
 ) -> dict:
-    """Entrena todos los modelos en cfg.KGE_MODELS y guarda tabla comparativa."""
+    """
+    Entrena todos los modelos en cfg.KGE_MODELS.
+
+    Cada llamada a train() ya añade su fila al fichero acumulativo
+    (training_comparison.csv / .json) vía _append_to_comparison_table.
+    Aquí solo se imprime un resumen ASCII final con los modelos de esta
+    sesión.
+    """
     results = {}
     for model_name in cfg.KGE_MODELS:
         print(f"\n{'='*60}\nEntrenando {model_name}\n{'='*60}")
@@ -200,12 +317,90 @@ def train_all_models(
             model_name=model_name,
             epochs=epochs, dim=dim, batch=batch, lr=lr, device=device,
         )
-    _save_comparison_table(results)
+    _print_session_summary(results)
     return results
 
 
-def _save_comparison_table(results: dict) -> None:
-    """Extrae métricas de cada resultado PyKEEN y guarda JSON + CSV."""
+_COMPARISON_FIELDS = [
+    "timestamp", "model", "dim", "epochs", "lr", "device",
+    "hit@1", "hit@3", "hit@10", "mrr",
+]
+
+
+def _append_to_comparison_table(
+    model_name: str,
+    result,
+    dim:    int,
+    epochs: int,
+    lr:     float,
+    device: str,
+) -> dict:
+    """
+    Añade una fila al fichero acumulativo de comparación de modelos.
+
+    Cada entrenamiento (independientemente de si fue individual o vía
+    --all-models) inserta una nueva fila con timestamp, hiperparámetros
+    y métricas finales del test set. Es un log de versiones: si el
+    mismo modelo se entrena varias veces, aparecerán varias filas y
+    podrás comparar cómo evolucionan las métricas según los hiperparámetros.
+
+    Salida:
+      out/evaluation/model_comparison/training_comparison.csv  (append)
+      out/evaluation/model_comparison/training_comparison.json (append)
+    """
+    metrics = result.metric_results.to_dict()
+    hits    = metrics.get("both", {}).get("realistic", {})
+
+    # En PyKEEN moderno la clave canónica de MRR es "inverse_harmonic_mean_rank"
+    # ("mean_reciprocal_rank" sólo es alias y no aparece en to_dict()).
+    mrr = hits.get("inverse_harmonic_mean_rank", hits.get("mean_reciprocal_rank", 0.0))
+
+    row = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "model":     model_name,
+        "dim":       dim,
+        "epochs":    epochs,
+        "lr":        lr,
+        "device":    device,
+        "hit@1":     round(hits.get("hits_at_1",  0.0), 4),
+        "hit@3":     round(hits.get("hits_at_3",  0.0), 4),
+        "hit@10":    round(hits.get("hits_at_10", 0.0), 4),
+        "mrr":       round(mrr, 4),
+    }
+
+    cfg.MODEL_COMPARISON_DIR.mkdir(parents=True, exist_ok=True)
+    csv_path  = cfg.MODEL_COMPARISON_DIR / "training_comparison.csv"
+    json_path = cfg.MODEL_COMPARISON_DIR / "training_comparison.json"
+
+    # CSV: append-mode con header si no existe
+    is_new = not csv_path.exists()
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_COMPARISON_FIELDS)
+        if is_new:
+            writer.writeheader()
+        writer.writerow(row)
+
+    # JSON: leer, añadir, guardar (formato lista de dicts)
+    existing: list = []
+    if json_path.exists():
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                existing = data
+        except json.JSONDecodeError:
+            existing = []
+    existing.append(row)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)
+
+    print(f"\n  Tabla comparativa actualizada: {csv_path}")
+    print(f"    Entradas totales: {len(existing)}  (entrada nueva: {row['timestamp']})")
+    return row
+
+
+def _print_session_summary(results: dict) -> None:
+    """Imprime una tabla ASCII con los modelos entrenados en esta sesión."""
     rows = []
     for model_name, result in results.items():
         metrics = result.metric_results.to_dict()
@@ -215,31 +410,18 @@ def _save_comparison_table(results: dict) -> None:
             "hit@1":   round(hits.get("hits_at_1",  0.0), 4),
             "hit@3":   round(hits.get("hits_at_3",  0.0), 4),
             "hit@10":  round(hits.get("hits_at_10", 0.0), 4),
-            "mrr":     round(hits.get("mean_reciprocal_rank", 0.0), 4),
+            "mrr":     round(hits.get("inverse_harmonic_mean_rank",
+                                       hits.get("mean_reciprocal_rank", 0.0)), 4),
         })
 
-    cfg.MODEL_COMPARISON_DIR.mkdir(parents=True, exist_ok=True)
-
-    json_path = cfg.MODEL_COMPARISON_DIR / "training_comparison.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=2)
-
-    csv_path = cfg.MODEL_COMPARISON_DIR / "training_comparison.csv"
-    fieldnames = ["model", "hit@1", "hit@3", "hit@10", "mrr"]
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-    # Tabla ASCII en consola
     print("\n" + "=" * 55)
+    print(f"  Resumen de sesión")
     print(f"  {'Modelo':<12} {'Hit@1':>8} {'Hit@3':>8} {'Hit@10':>8} {'MRR':>8}")
     print("  " + "-" * 51)
     for row in rows:
         print(f"  {row['model']:<12} {row['hit@1']:>8.4f} {row['hit@3']:>8.4f} "
               f"{row['hit@10']:>8.4f} {row['mrr']:>8.4f}")
     print("=" * 55)
-    print(f"\n  Tabla guardada en {csv_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +441,7 @@ def run(model_name=None, epochs=None, dim=None, device=None, all_models=False, m
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entrenar modelos KGE con PyKEEN")
     parser.add_argument("--model",      default="DistMult",
-                        help="Modelo KGE a entrenar (default: DistMult)")
+                        help=f"Modelo KGE a entrenar. Opciones: {cfg.KGE_MODELS} (default: DistMult)")
     parser.add_argument("--all-models", action="store_true",
                         help=f"Entrenar todos los modelos: {cfg.KGE_MODELS}")
     parser.add_argument("--epochs", type=int, default=cfg.N_EPOCHS)

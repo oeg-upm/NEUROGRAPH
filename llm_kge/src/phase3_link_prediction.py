@@ -24,10 +24,32 @@ import config as cfg
 
 
 # ---------------------------------------------------------------------------
+# Caches por-factory (evitan reconstruir id_to_ent y diccionarios inversos
+# en cada llamada a predict_tails / predict_heads).
+# ---------------------------------------------------------------------------
+
+_FACTORY_CACHE: dict[int, dict] = {}
+
+
+def _factory_cache(training_factory) -> dict:
+    key = id(training_factory)
+    cache = _FACTORY_CACHE.get(key)
+    if cache is None:
+        cache = {
+            "ent2id":   training_factory.entity_to_id,
+            "rel2id":   training_factory.relation_to_id,
+            "id_to_ent": {v: k for k, v in training_factory.entity_to_id.items()},
+            "id_to_rel": {v: k for k, v in training_factory.relation_to_id.items()},
+        }
+        _FACTORY_CACHE[key] = cache
+    return cache
+
+
+# ---------------------------------------------------------------------------
 # Carga del modelo y fábrica de tripletas
 # ---------------------------------------------------------------------------
 
-def load_model_by_name(model_name: str = 'DistMult'):
+def load_model_by_name(model_name: str = 'DistMult', device: str | None = None):
     """
     Carga un modelo KGE entrenado por nombre desde out/models/<model_name>/.
     Retorna (model, training_factory).
@@ -35,6 +57,12 @@ def load_model_by_name(model_name: str = 'DistMult'):
     El factory se carga del directorio del modelo (guardado por PyKEEN durante
     el entrenamiento), garantizando que entity_to_id coincide exactamente con
     el vocabulario con el que se entrenó el modelo.
+
+    device: "cuda" | "cpu" | None.
+      - None  → CUDA si está disponible (usado en evaluación del sistema).
+      - "cpu" → fuerza CPU. Útil en create_incident, donde la GPU la ocupa vLLM
+                y compartirla provoca el fallo NVML del allocator de PyTorch en
+                score_t. El scoring de unos pocos proxies en CPU es trivial.
     """
     import pickle
     from pykeen.triples import TriplesFactory
@@ -47,8 +75,12 @@ def load_model_by_name(model_name: str = 'DistMult'):
             f"Ejecuta primero:  python src/phase2_kge_train.py --model {model_name}"
         )
 
-    model = torch.load(model_path, map_location="cpu", weights_only=False)
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    model  = torch.load(model_path, map_location=device, weights_only=False)
+    model  = model.to(device)
     model.eval()
+    print(f"[KGE] modelo {model_name} cargado en {device}")
 
     # Intentar cargar el factory guardado durante el entrenamiento.
     # PyKEEN lo guarda en training_triples_factory.pkl (o training.pkl).
@@ -91,22 +123,21 @@ def predict_tails(
     entre el factory guardado en el modelo y el factory reconstruido desde TSV.
     """
     try:
-        ent2id = training_factory.entity_to_id
-        rel2id = training_factory.relation_to_id
-
-        head_id = ent2id.get(head_label)
-        rel_id  = rel2id.get(relation_label)
+        cache    = _factory_cache(training_factory)
+        head_id  = cache["ent2id"].get(head_label)
+        rel_id   = cache["rel2id"].get(relation_label)
         if head_id is None or rel_id is None:
             return []
 
-        hr = torch.tensor([[head_id, rel_id]], dtype=torch.long)
+        device = next(model.parameters()).device
+        hr = torch.tensor([[head_id, rel_id]], dtype=torch.long, device=device)
         with torch.no_grad():
             scores = model.score_t(hr).squeeze(0).cpu()  # [num_entities]
 
         n = min(top_k, scores.shape[0])
         top_scores, top_ids = torch.topk(scores, n)
 
-        id_to_ent = {v: k for k, v in ent2id.items()}
+        id_to_ent = cache["id_to_ent"]
         return [
             (id_to_ent[i.item()], s.item())
             for i, s in zip(top_ids, top_scores)
@@ -114,6 +145,69 @@ def predict_tails(
         ]
     except Exception:
         return []
+
+
+def predict_tails_batch(
+    model,
+    training_factory,
+    head_labels: list[str],
+    relation_label: str,
+    top_k: int = cfg.TOP_K_PREDICT,
+) -> list[list[tuple[str, float]]]:
+    """
+    Versión batched de predict_tails: una sola pasada por el KGE para B cabezas
+    con la misma relación. Devuelve [top_k_de_head_1, top_k_de_head_2, …].
+    Mucho más rápido que llamar predict_tails B veces (elimina B-1 overheads).
+    """
+    if not head_labels:
+        return []
+    try:
+        cache  = _factory_cache(training_factory)
+        ent2id = cache["ent2id"]
+        rel_id = cache["rel2id"].get(relation_label)
+        if rel_id is None:
+            print(f"[KGE][diag] La relación '{relation_label}' no está en el "
+                  f"vocabulario del modelo ({len(cache['rel2id'])} relaciones). "
+                  f"Sin predicción de cola.")
+            return [[] for _ in head_labels]
+
+        rows: list[list[int]] = []
+        keep: list[int] = []   # índices originales que pudieron mapearse
+        for i, h in enumerate(head_labels):
+            hid = ent2id.get(h)
+            if hid is not None:
+                rows.append([hid, rel_id])
+                keep.append(i)
+        if not rows:
+            print(f"[KGE][diag] Ninguno de los {len(head_labels)} proxies CBR "
+                  f"existe en el vocabulario del modelo ({len(ent2id)} entidades). "
+                  f"Probablemente train.tsv se regeneró tras entrenar el modelo: "
+                  f"los IDs de incidencia ya no coinciden. Reentrena el KGE o usa "
+                  f"el train.tsv original.")
+            return [[] for _ in head_labels]
+
+        device = next(model.parameters()).device
+        hr = torch.tensor(rows, dtype=torch.long, device=device)
+        with torch.no_grad():
+            scores = model.score_t(hr).cpu()        # [B, num_entities]
+
+        n = min(top_k, scores.shape[1])
+        top_scores, top_ids = torch.topk(scores, n, dim=1)
+
+        id_to_ent = cache["id_to_ent"]
+        out: list[list[tuple[str, float]]] = [[] for _ in head_labels]
+        for j, orig_i in enumerate(keep):
+            out[orig_i] = [
+                (id_to_ent[i.item()], s.item())
+                for i, s in zip(top_ids[j], top_scores[j])
+                if i.item() in id_to_ent
+            ]
+        return out
+    except Exception as e:
+        import traceback
+        print(f"[KGE][diag] predict_tails_batch falló: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return [[] for _ in head_labels]
 
 
 def predict_heads(
@@ -127,22 +221,21 @@ def predict_heads(
     Dado (?, relation, tail), devuelve las top_k entidades head más probables.
     """
     try:
-        ent2id = training_factory.entity_to_id
-        rel2id = training_factory.relation_to_id
-
-        tail_id = ent2id.get(tail_label)
-        rel_id  = rel2id.get(relation_label)
+        cache    = _factory_cache(training_factory)
+        tail_id  = cache["ent2id"].get(tail_label)
+        rel_id   = cache["rel2id"].get(relation_label)
         if tail_id is None or rel_id is None:
             return []
 
-        rt = torch.tensor([[rel_id, tail_id]], dtype=torch.long)
+        device = next(model.parameters()).device
+        rt = torch.tensor([[rel_id, tail_id]], dtype=torch.long, device=device)
         with torch.no_grad():
             scores = model.score_h(rt).squeeze(0).cpu()  # [num_entities]
 
         n = min(top_k, scores.shape[0])
         top_scores, top_ids = torch.topk(scores, n)
 
-        id_to_ent = {v: k for k, v in ent2id.items()}
+        id_to_ent = cache["id_to_ent"]
         return [
             (id_to_ent[i.item()], s.item())
             for i, s in zip(top_ids, top_scores)
