@@ -158,13 +158,22 @@ KGE_master_tesis/
 
 > Las dependencias entre fases son: **0 → 1 → 2 → 3 → 5 (create_incident)**, con la **fase 4 (reglas, opcional)** colgando de la fase 0, y **build_eval → 6** para la evaluación.
 
-### Fase 0 — Partición de Datos (split train/eval)
+### Fase 0 — Partición de Datos (conversión N3→TTL + split train/eval)
 
 ```bash
 python src/run_pipeline.py --phase 0
 ```
 
-Divide `data/incident_triplets.ttl` en `train_full.ttl` (95%) y `test_eval.ttl` (5%). El conjunto de eval se mantiene **fuera** del entrenamiento y del pool CBR para no contaminar las métricas.
+**Entrada — el grafo de partida** (en `data/`):
+- Por defecto el pipeline arranca de un grafo **`incident_triplets.n3`** (formato N3), que esta fase convierte a Turtle (`incident_triplets.ttl`) con rdflib.
+- También puedes **empezar directamente con un `.ttl`**: si ya existe `data/incident_triplets.ttl`, la conversión se **omite** y se usa ese fichero tal cual.
+- **Grafo arbitrario con `--input`**: puedes partir de cualquier grafo `.n3` o `.ttl` que indiques.
+
+```bash
+python src/run_pipeline.py --phase 0 --input data/mi_grafo.n3
+```
+
+Después, divide el grafo en `train_full.ttl` (95%) y `test_eval.ttl` (5%). El conjunto de eval se mantiene **fuera** del entrenamiento y del pool CBR para no contaminar las métricas.
 
 ---
 
