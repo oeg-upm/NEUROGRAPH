@@ -12,19 +12,9 @@ INSTRUCCIONES ESTRICTAS:
 FORMATO DE SALIDA ESPERADO:
 ["company__", "supportCategory__", "typeIncident__", "incidentOrigin__", "supportGroup__", "employee__"]
 
-REGLAS:
-<<REGLAS>>
-
-DATOS EXTRAÍDOS:
-<<DATOS>>
-
-CONVERSACIÓN ANTERIOR (Estado actual de la lista):
-<<CONVERSACIÓN>>
-
-USUARIO:
-<<MENSAJE>>
 
 === EJEMPLOS ===
+
 
 REGLAS:
 Regla df. Si hay incidentOrigin__4 EL VALOR POR DEFECTO ES typeIncident__1.
@@ -41,7 +31,27 @@ typeIncident__4
 GraphRAG: ["company__UPFP8CUEG", "supportCategory_1497610291762302622", "typeIncident__4", None, None, None]
 
 
+
+
 -----
+
+---
+
+REGLAS:
+Regla df. Si hay incidentOrigin__3 EL VALOR POR DEFECTO ES supportGroup_149762881762302662.
+Regla df. Si hay ss y typeIncident__1 EL VALOR POR DEFECTO ES supportGroup_14976691762302662.
+Regla noValid. Si hay company__P8EM3ZO35 NO ES POSIBLE supportGroup_14976106631762302666.
+
+CONVERSACIÓN ANTERIOR:
+["company__UPFDW4TUEG", "supportCategory_149761526522302622", "typeIncident__3", "incidentOrigin__2", None, None]
+
+DATOS EXTRAÍDOS:
+supportGroup_1441412341202662
+
+GraphRAG: ["company__UPFDW4TUEG", "supportCategory_149761526522302622", "typeIncident__3", "incidentOrigin__2", "supportGroup_1441412341202662", None]
+
+
+---
 
 REGLAS:
 Regla noValid. Si hay ss NO ES POSIBLE incidentOrigin__1.
@@ -92,4 +102,19 @@ GraphRAG: ["company__UPFP8CUEG", "supportCategory_1497610291762302622", "typeInc
 === FIN DE LOS EJEMPLOS ===
 
 A continuación, genera el output para el siguiente caso:
+
+
+REGLAS:
+<<REGLAS>>
+
+DATOS EXTRAÍDOS:
+<<DATOS>>
+
+CONVERSACIÓN ANTERIOR (Estado actual de la lista):
+<<CONVERSACIÓN>>
+
+<<MENSAJE>>
+
+
+
 GraphRAG:

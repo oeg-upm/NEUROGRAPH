@@ -64,6 +64,7 @@ def buscar_frecuentes_por_opcion(g, filtros_array, opcion, prefix_uri="http://re
     LIMIT 3
     """
 
+    #print(query)
     
     resultados = g.query(query)
 
