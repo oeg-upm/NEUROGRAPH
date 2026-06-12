@@ -29,6 +29,7 @@ Con rdflib se analiza el conjunto de tripletas que se utiliza, que actualmente e
 
 Es importante que la carpeta 'textos' esté en el mismo directorio que chat o que en su defecto se actualicen las rutas en el código.
 
+En la carpeta textos se encuentran las reglas en formato json. Si se quieren cambiar las reglas deben seguir el mismo formato del fichero.
 
 En caso de usar un LLM asegurarse que se tiene instalado en modelo en local y que el nombre del modelo y el puerto del para accederlo sea el correcto. Por defecto se utiliza mistral con ollama. Si se quiere modificar cambiar el fichero config.py
 
@@ -37,7 +38,7 @@ En caso de usar un LLM asegurarse que se tiene instalado en modelo en local y qu
 
 
 ```
-filtrado.ttl
+fichero_datos.ttl
         │
         ▼
 ┌───────────────────────────────────┐
@@ -56,15 +57,15 @@ filtrado.ttl
 │  Fase 3 — Generación de query del │ ──▶ searchInGraph.py
 │  campo faltante. Consulta grafo   │ 
 └───────────────────────────────────┘
-        │ (+verbalización pregunta) ──▶ contexto.txt
+        │ (generación valor nuevo con LLM) ──▶ contextoeval2.txt
         ├─────────────────────────────┐
         ▼                             ▼
 ┌─────────────────────┐   ┌─────────────────────────────┐
-│  Fase 4a Aceptado   │   │  Fase 4b — Negado por user  │
-│  Volver a 3         │   │                             │
-│  Si no hay más      │   │  Generar query PARCIAL      │
-│  campos fin         │   │  Consultar usuario          │
-│                     │   │  nuevamente hasta aceptar   │
+│  Fase 4a Aceptado   │   │  Fase 4b — ERROR si         │
+│  Volver a 3         │   │  contradice regla nV        │
+│  Si no hay más      │   │  Volver a generar con L     │
+│  campos fin         │   │  segunda opción             │
+│                     │   │                             │
 └─────────────────────┘   └─────────────────────────────┘
         │
         ▼
@@ -79,6 +80,6 @@ filtrado.ttl
 
 ### Ejecución
 
-Ejecutar el programa 'chat.py'.
+Ejecutar el programa 'chatAIcompletion.py'.
 
-Ir completando la query marcando las opciones como se plantean por pantalla. El programa acabará cuando la query tenga todos los campos pertinentes.
+Se podrá escribir por la terminal y se extraerán los datos de company y support category. El resto se irán rellenando automáticamente. El programa acabará cuando la query tenga todos los campos pertinentes.
