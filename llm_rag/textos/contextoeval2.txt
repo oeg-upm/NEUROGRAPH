@@ -55,6 +55,7 @@ El campo a rellenar es hasSupportGroup y estas son las opciones:
 
 repcon:hasSupportGroup repcon:supportGroup_14412691764575162
 
+Se espera que extraigas el campo supportGroup
 
 GraphRAG: repcon:supportGroup_14976691762302662 
 
@@ -78,6 +79,7 @@ El campo a rellenar es hasSupportGroup y estas son las opciones:
 
 repcon:hasSupportGroup repcon:supportGroup_1441412341202662
 
+Se espera que extraigas el campo supportGroup
 
 GraphRAG: repcon:supportGroup_1441412341202662
 
@@ -100,6 +102,7 @@ El campo a rellenar es incident_hasOrigin y estas son las opciones:
 
 repcon:incident_hasOrigin repcon:incidentOrigin__1
 
+Se espera que extraigas el campo incidentOrigin
 
 GraphRAG: repcon:incidentOrigin__1
 
@@ -121,7 +124,7 @@ El campo a rellenar es hasTypeInc y estas son las opciones:
 
 repcon:hasTypeInc repcon:incidentOrigin__3
 
-
+Se espera que extraigas el campo incidentOrigin
 
 GraphRAG: "ERROR"
 
@@ -145,6 +148,7 @@ El campo a rellenar es hasSupportGroup y estas son las opciones:
 
 repcon:hasSupportGroup repcon:supportGroup_14412691762302662
 
+Se espera que extraigas el campo supportGroup
 
 GraphRAG: repcon:supportGroup_14412691762302662
 
