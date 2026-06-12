@@ -25,7 +25,7 @@ pip install -r requirements.txt
 ```
 
 
-Con rdflib se analiza el conjunto de tripletas que se utiliza, que actualmente es el fichero llamado "filtrado.ttl", si se quiere utilizar otro o cambiar la ruta en el fichero de configuración.
+Con rdflib se analiza el conjunto de tripletas que se utiliza, que actualmente es el fichero llamado "incident_triplets_convertido.ttl", si se quiere utilizar otro o cambiar la ruta modificar el fichero de configuración.
 
 Es importante que la carpeta 'textos' esté en el mismo directorio que chat o que en su defecto se actualicen las rutas en el código.
 
