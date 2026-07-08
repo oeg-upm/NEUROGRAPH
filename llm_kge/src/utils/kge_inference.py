@@ -1,25 +1,20 @@
 """
-Fase 3 — Inferencia de relaciones latentes (link prediction).
+Inferencia con modelos KGE entrenados (link prediction).
 
-Usa cualquier modelo KGE entrenado en phase2 para predecir entidades
-tail dada una cabeza y una relación, e inferir patrones implícitos
-en el grafo de incidencias.
+Librería de inferencia sobre los modelos de embeddings: carga de un modelo
+entrenado, predicción de colas (tail) y cabezas (head), y el adaptador
+``KGEScorer`` que inyecta el KGE en el motor de razonamiento basado en casos
+(``utils/cbr_engine``).
 
-Salida:
-  out/predictions/implicit_relations.json
-
-Uso:
-  python src/phase3_link_prediction.py [--top-k 10] [--model DistMult]
+Es simétrica a los demás motores de ``utils/`` (``rule_engine``, ``cbr_engine``,
+``llm_inference``) y no depende de ninguna fase del pipeline. La importan la
+fase de creación de incidencias, la de evaluación y la fase de minería de
+relaciones implícitas.
 """
-
-import argparse
-import json
-import sys
-from pathlib import Path
+from __future__ import annotations
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent))
 import config as cfg
 
 
@@ -72,7 +67,7 @@ def load_model_by_name(model_name: str = 'DistMult', device: str | None = None):
     if not model_path.exists():
         raise FileNotFoundError(
             f"Modelo no encontrado: {model_path}\n"
-            f"Ejecuta primero:  python src/phase2_kge_train.py --model {model_name}"
+            f"Ejecuta primero:  python src/phase3_kge_train.py --model {model_name}"
         )
 
     if device is None:
@@ -246,98 +241,25 @@ def predict_heads(
 
 
 # ---------------------------------------------------------------------------
-# Minería de relaciones implícitas
+# Adaptador de scoring para el motor CBR (inyección de dependencia)
 # ---------------------------------------------------------------------------
 
-def mine_implicit_relations(
-    model,
-    training_factory,
-    top_k: int = cfg.TOP_K_PREDICT,
-    max_per_relation: int = 20,
-) -> dict:
+class KGEScorer:
+    """Envuelve un modelo KGE entrenado (model + training_factory) y expone las
+    operaciones de scoring que necesita el motor CBR (``utils/cbr_engine``).
+
+    Permite inyectar el KGE en ``recommend_property`` sin que el motor CBR
+    conozca ni dependa del modelo concreto.
     """
-    Para cada relación del grafo, muestrea entidades representativas y
-    predice las entidades tail más probables.
 
-    Esto permite descubrir patrones latentes como:
-      - "¿Qué técnico suele resolver incidencias de typeIncident__1?"
-      - "¿Qué grupo de soporte maneja más incidencias de company__X?"
+    def __init__(self, model, training_factory):
+        self.model = model
+        self.factory = training_factory
 
-    Retorna un dict estructurado por relación.
-    """
-    entity_to_id   = training_factory.entity_to_id
-    relation_to_id = training_factory.relation_to_id
-    id_to_entity   = {v: k for k, v in entity_to_id.items()}
+    def tails(self, head_labels, relation_label, top_k=cfg.TOP_K_PREDICT):
+        return predict_tails_batch(self.model, self.factory, head_labels,
+                                   relation_label, top_k)
 
-    results = {}
-
-    # Predicciones head→tail por relación
-    for rel_label in relation_to_id:
-        print(f"  Prediciendo tails para relación: {rel_label}")
-        # Muestrear algunas entidades que sean cabeza de esta relación
-        head_candidates = [
-            e for e in entity_to_id
-            if e.startswith("incident_")
-        ][:max_per_relation]
-
-        rel_predictions = []
-        for head in head_candidates:
-            preds = predict_tails(model, training_factory, head, rel_label, top_k=5)
-            if preds:
-                rel_predictions.append({
-                    "head": head,
-                    "relation": rel_label,
-                    "top_tails": [{"entity": e, "score": round(s, 4)} for e, s in preds],
-                })
-        results[rel_label] = rel_predictions
-
-    # Caso de uso clave: ¿qué técnico resuelve cada tipo de incidencia?
-    print("  Prediciendo técnicos por tipo de incidencia ...")
-    tech_by_type = {}
-    for type_label in [e for e in entity_to_id if e.startswith("typeIncident__")]:
-        preds = predict_heads(model, training_factory, "hasTechnician", type_label, top_k=top_k)
-        # Filtrar solo empleados
-        employee_preds = [(e, s) for e, s in preds if e.startswith("employee__")]
-        tech_by_type[type_label] = [
-            {"technician": e, "score": round(s, 4)} for e, s in employee_preds[:5]
-        ]
-    results["_techniciansByIncidentType"] = tech_by_type
-
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Punto de entrada
-# ---------------------------------------------------------------------------
-
-def run(top_k: int = cfg.TOP_K_PREDICT, model_name: str = 'DistMult') -> dict:
-    print("=" * 60)
-    print(f"FASE 3 — Link prediction ({model_name})")
-    print("=" * 60)
-
-    print(f"[1/3] Cargando modelo {model_name} y factory ...")
-    model, training_factory = load_model_by_name(model_name)
-
-    print(f"[2/3] Minando relaciones implícitas (top_k={top_k}) ...")
-    predictions = mine_implicit_relations(model, training_factory, top_k=top_k)
-
-    print("[3/3] Guardando predicciones ...")
-    cfg.PRED_DIR.mkdir(parents=True, exist_ok=True)
-    with open(cfg.IMPLICIT_RELS_FILE, "w", encoding="utf-8") as f:
-        json.dump(predictions, f, ensure_ascii=False, indent=2)
-    print(f"      Guardado: {cfg.IMPLICIT_RELS_FILE}")
-
-    # Resumen
-    n_rels = len([k for k in predictions if not k.startswith("_")])
-    print(f"\n      Relaciones procesadas: {n_rels}")
-    print("\n✓ Fase 3 completada.")
-    return predictions
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Link prediction con modelos KGE")
-    parser.add_argument("--top-k", type=int, default=cfg.TOP_K_PREDICT)
-    parser.add_argument("--model", default="DistMult",
-                        help="Modelo KGE a usar (default: DistMult)")
-    args = parser.parse_args()
-    run(top_k=args.top_k, model_name=args.model)
+    def heads(self, relation_label, tail_label, top_k=cfg.TOP_K_PREDICT):
+        return predict_heads(self.model, self.factory, relation_label,
+                             tail_label, top_k)

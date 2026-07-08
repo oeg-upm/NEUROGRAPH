@@ -1,9 +1,9 @@
 """
-Construye el conjunto de evaluación para phase6_eval_incident_creator.
+Construye el conjunto de evaluación para phase5_eval_incident_creator.
 
 Lee data/test_eval.ttl, selecciona N incidencias (default 500) y exporta cada
 una como un objeto JSONL con la misma forma que `created_incidents.jsonl` del
-wizard de phase5_incident_creator. Los campos ausentes se marcan con "skip"
+wizard de phase4_incident_creator. Los campos ausentes se marcan con "skip"
 para que la evaluación los pueda saltar sin ambigüedad.
 
 Salida:
@@ -25,7 +25,7 @@ Formato por línea:
 Uso:
     python src/run_pipeline.py --phase build_eval
     python src/run_pipeline.py --phase build_eval --n 500 --seed 42
-    python src/phase6_build_eval.py --ttl data/test_eval.ttl --out data/evaluacion
+    python src/phase5_build_eval.py --ttl data/test_eval.ttl --out data/evaluacion
 """
 
 import argparse
@@ -34,7 +34,7 @@ import random
 from pathlib import Path
 
 import config as cfg
-from phase5_incident_creator import INCIDENT_PROPS, MULTI_VALUE_PROPS
+from phase4_incident_creator import INCIDENT_PROPS, MULTI_VALUE_PROPS
 from utils.graph_utils import load_graph, build_incident_map
 
 

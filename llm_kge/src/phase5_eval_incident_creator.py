@@ -1,9 +1,9 @@
 """
-Fase 6 — Evaluación end-to-end del pipeline de creación guiada (phase4).
+Fase 5 — Evaluación end-to-end del pipeline de creación guiada (create_incident).
 
-Lee el JSONL generado por `src/phase6_build_eval.py` (por defecto
+Lee el JSONL generado por `src/phase5_build_eval.py` (por defecto
 `data/evaluacion/test_eval_500.jsonl`) y, por cada incidencia, simula la
-cascada REGLA → KGE+CBR de phase5_incident_creator usando el valor real del
+cascada REGLA → KGE+CBR de phase4_incident_creator usando el valor real del
 JSONL como ground truth.
 
 Flujo por incidencia:
@@ -36,10 +36,10 @@ Salida:
     pyclause.log     (toda la salida verbosa de pyclause/c_clause)
 
 Uso:
-  python src/phase6_eval_incident_creator.py
-  python src/phase6_eval_incident_creator.py --kge-model TransE
-  python src/phase6_eval_incident_creator.py --eval-jsonl data/evaluacion/test_eval_500.jsonl
-  python src/phase6_eval_incident_creator.py --top-k 1 3 5 10
+  python src/phase5_eval_incident_creator.py
+  python src/phase5_eval_incident_creator.py --kge-model TransE
+  python src/phase5_eval_incident_creator.py --eval-jsonl data/evaluacion/test_eval_500.jsonl
+  python src/phase5_eval_incident_creator.py --top-k 1 3 5 10
 """
 
 import argparse
@@ -54,10 +54,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import config as cfg
-from phase5_incident_creator import (
+from phase4_incident_creator import (
     INCIDENT_PROPS,
     MULTI_VALUE_PROPS,
-    _build_incidents_map_from_tsv,
+)
+from utils.cbr_engine import (
+    build_incidents_map_from_tsv,
     build_incidents_index,
     recommend_property,
 )
@@ -91,7 +93,7 @@ EVAL_PROPS = [p for p in INCIDENT_PROPS
 
 def _load_eval_jsonl(jsonl_path: Path) -> list[tuple[str, dict]]:
     """
-    Lee el JSONL producido por src/phase6_build_eval.py y devuelve una
+    Lee el JSONL producido por src/phase5_build_eval.py y devuelve una
     lista [(incident_id, ground_truth_dict)], filtrando sólo INCIDENT_PROPS.
     Los valores marcados como "skip" se conservan tal cual para que la
     evaluación los pueda saltar.
@@ -169,10 +171,10 @@ def evaluate_pipeline(
 ) -> tuple[dict, list[dict]]:
     """
     Recorre el JSONL de evaluación y simula la cascada REGLA → KGE+CBR de
-    phase4 sobre cada incidencia, devolviendo (per_prop_stats, prediction_rows).
+    create_incident sobre cada incidencia, devolviendo (per_prop_stats, prediction_rows).
     Toda la salida verbosa de pyclause/c_clause se redirige a `pyclause_log`.
     """
-    from phase3_link_prediction import load_model_by_name
+    from utils.kge_inference import load_model_by_name, KGEScorer
 
     max_k = max(top_k_values)
 
@@ -182,7 +184,7 @@ def evaluate_pipeline(
 
     # --- Recursos ---
     print("\n[1/4] Cargando pool CBR desde train.tsv ...")
-    incidents_map = _build_incidents_map_from_tsv()
+    incidents_map = build_incidents_map_from_tsv(INCIDENT_PROPS)
     print(f"      Pool CBR: {len(incidents_map):,} incidencias")
     print("      Construyendo índice inverso del pool ...")
     cbr_index = build_incidents_index(incidents_map)
@@ -202,6 +204,7 @@ def evaluate_pipeline(
     print(f"      Reglas: {rs['total_rules']:,} ({rs['predicates']} predicados)")
 
     model, factory = load_model_by_name(kge_model_name)
+    kge_scorer = KGEScorer(model, factory)
     print(f"      Modelo KGE: {kge_model_name}")
 
     print(f"\n[4/4] Evaluando {len(test_incidents):,} incidencias  (top_k={max_k}) ...")
@@ -298,8 +301,7 @@ def evaluate_pipeline(
                         known_props=known_props,
                         target_prop=prop,
                         incidents_map=incidents_map,
-                        model=model,
-                        factory=factory,
+                        kge_scorer=kge_scorer,
                         top_k=max_k,
                         index=cbr_index,
                         exclude_id=inc_id,

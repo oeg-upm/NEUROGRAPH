@@ -175,7 +175,7 @@ def main(requested: list[str] | None = None):
 
     requested: lista de nombres de split (con o sin '.ttl'). Si es None se leen
     de sys.argv (modo CLI). Pasa [] para procesar TODOS los splits sin depender
-    de argv — así lo invoca la Fase 4 (phase4_learn_rules.run()).
+    de argv — así lo invoca la Fase 1 (phase1_learn_rules.run()).
     """
     if not SPLITS_DIR.exists():
         print(f"[!] No existe {SPLITS_DIR}")

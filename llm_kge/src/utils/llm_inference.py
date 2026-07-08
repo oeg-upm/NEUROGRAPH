@@ -1,7 +1,7 @@
 """
 Fase 4 — Inferencia con LLM aumentado con contexto KGE.
 
-Librería usada por phase5_incident_creator para generar el resumen final de
+Librería usada por phase4_incident_creator para generar el resumen final de
 la incidencia. Expone:
 
   - KGEAugmentedLLM : cliente del servidor vLLM (API OpenAI-compatible)

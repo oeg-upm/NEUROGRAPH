@@ -41,7 +41,7 @@ IMPLICIT_RELS_FILE  = PRED_DIR / "implicit_relations.json"
 # Multi-model KGE
 # ---------------------------------------------------------------------------
 
-KGE_MODELS = ['TransE', 'RotatE', 'TransH', 'HAKE', 'DistMult', 'ComplEx', 'TorusE', 'PairRE', "ConvE"]
+KGE_MODELS = ['TransE', 'RotatE', 'TransH', 'DistMult', 'ComplEx', 'TorusE', 'PairRE', "ConvE"]
 
 
 def model_dir(model_name: str) -> Path:
@@ -64,7 +64,7 @@ def relation_embeddings_path(model_name: str) -> Path:
 ENTITY_TO_ID        = MAPS_DIR / "entity_to_id.json"
 RELATION_TO_ID      = MAPS_DIR / "relation_to_id.json"
 
-# Salida de la comparación de entrenamiento multi-modelo (phase2 --all-models)
+# Salida de la comparación de entrenamiento multi-modelo (phase3 --all-models)
 MODEL_COMPARISON_DIR = EVAL_DIR / "model_comparison"
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ SLICE_SIZE      = 5000
 #   n_per_type=5000  →  ~40-50k puntos  →  20-40 min
 TSNE_N_PER_TYPE = 2000
 
-# Early stopping (PyKEEN EarlyStopper). Activado en phase2.
+# Early stopping (PyKEEN EarlyStopper). Activado en phase3.
 EARLY_STOP_FREQUENCY      = 1         # evaluar en validación cada N épocas
 EARLY_STOP_PATIENCE       = 3         # nº de evaluaciones consecutivas sin mejora antes de parar
 EARLY_STOP_RELATIVE_DELTA = 0.002     # mejora relativa mínima para considerar progreso
@@ -127,4 +127,4 @@ W_CBR   = 0.3  # peso del ranking CBR  (W_KGE + W_CBR debe sumar 1)
 # Evaluación
 # ---------------------------------------------------------------------------
 
-TOP_K_PREDICT   = 10           # top-k en link prediction (phase3)
+TOP_K_PREDICT   = 10           # top-k en link prediction (phase4)

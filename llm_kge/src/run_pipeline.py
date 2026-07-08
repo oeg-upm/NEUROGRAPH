@@ -4,29 +4,25 @@ Orquestador del pipeline KGE + LLM.
 Ejecuta las fases del pipeline en orden o de forma individual.
 
 Uso:
-  # Pipeline completo (0 → 1 → 2 → 3 → create_incident)
+  # Pipeline completo (0 → 2 → 3 → create_incident)
   python src/run_pipeline.py --phase all
 
   # Preprocesado: incident_triplets → train_full.ttl + test_eval.ttl (split 95/5)
   python src/run_pipeline.py --phase 0
 
-  # Parseo del grafo: train_full.ttl → train.tsv (+ mapas entidad/relación)
+  # Aprendizaje de reglas Horn con AnyBURL (OPCIONAL · requiere Java · fuera de --phase all)
   python src/run_pipeline.py --phase 1
 
+  # Parseo del grafo: train_full.ttl → train.tsv (+ mapas entidad/relación)
+  python src/run_pipeline.py --phase 2
+
   # Entrenamiento KGE
-  python src/run_pipeline.py --phase 2                         # TransE (por defecto)
-  python src/run_pipeline.py --phase 2 --kge-model RotatE
-  python src/run_pipeline.py --phase 2 --all-models            # entrena todos secuencialmente
-  python src/run_pipeline.py --phase 2_plots --kge-model TransE  # regenera loss + t-SNE sin reentrenar
+  python src/run_pipeline.py --phase 3                         # TransE (por defecto)
+  python src/run_pipeline.py --phase 3 --kge-model RotatE
+  python src/run_pipeline.py --phase 3 --all-models            # entrena todos secuencialmente
+  python src/run_pipeline.py --phase 3_plots --kge-model TransE  # regenera loss + t-SNE sin reentrenar
 
-  # Link prediction
-  python src/run_pipeline.py --phase 3
-  python src/run_pipeline.py --phase 3 --kge-model ComplEx
-
-  # Aprendizaje de reglas Horn con AnyBURL (OPCIONAL · requiere Java · fuera de --phase all)
-  python src/run_pipeline.py --phase 4
-
-  # Creación guiada de incidencias (CBR + KGE + LLM)
+  # Creación guiada de incidencias (CBR + KGE + LLM)  — "fase 4"
   python src/run_pipeline.py --phase create_incident
   python src/run_pipeline.py --phase create_incident --no-llm
   python src/run_pipeline.py --phase create_incident --kge-model TransE
@@ -42,18 +38,18 @@ Uso:
   #   2) KGE+CBR: si el valor real está en top-K = kge_hit (con rank); si no = fail
   # Saltos: campos marcados como "skip" en el JSONL.
   # Resultados: out/evaluation/incident_creator_full/<ts>/{results.json, per_property.csv, predictions.csv}
-  python src/run_pipeline.py --phase 6
-  python src/run_pipeline.py --phase 6 --kge-model TransE
-  python src/run_pipeline.py --phase 6 --eval-jsonl data/evaluacion/test_eval_500.jsonl
+  python src/run_pipeline.py --phase 5
+  python src/run_pipeline.py --phase 5 --kge-model TransE
+  python src/run_pipeline.py --phase 5 --eval-jsonl data/evaluacion/test_eval_500.jsonl
 
   # Opciones del modelo KGE
-  python src/run_pipeline.py --phase 2 --epochs 50 --dim 64 --device cpu
+  python src/run_pipeline.py --phase 3 --epochs 50 --dim 64 --device cpu
 
 Dependencias entre fases:
-  Phase 0 → Phase 1 → Phase 2 → Phase 3
-  Phase 0 → Phase 4 (reglas Horn, opcional)
-                            → create_incident (CBR + KGE + LLM)
-  build_eval → 6 (evaluación end-to-end)
+  Phase 0 → Phase 2 → Phase 3 → create_incident (CBR + KGE + LLM · "fase 4")
+  Phase 0 → Phase 1 (reglas Horn, opcional · requiere Java · fuera de --phase all)
+  build_eval → 5 (evaluación end-to-end)
+  (La predicción de enlaces se ofrece como librería en utils/kge_inference.)
 """
 
 import argparse
@@ -133,13 +129,19 @@ def run_phase0(test_ratio=None, seed=None, input_graph=None):
     run(**kwargs)
 
 
-def run_phase1():
-    from phase1_triples import run
+def run_phase1_rules():
+    """Aprende reglas Horn con AnyBURL (opcional; requiere Java). Fuera de --phase all."""
+    from phase1_learn_rules import run
     run()
 
 
-def run_phase2(epochs=None, dim=None, device=cfg.DEVICE, kge_model=None, all_models=False):
-    from phase2_kge_train import run
+def run_phase2():
+    from phase2_triples import run
+    run()
+
+
+def run_phase3(epochs=None, dim=None, device=cfg.DEVICE, kge_model=None, all_models=False):
+    from phase3_kge_train import run
     run(
         model_name=kge_model or 'TransE',
         epochs=epochs, dim=dim, device=device,
@@ -147,25 +149,14 @@ def run_phase2(epochs=None, dim=None, device=cfg.DEVICE, kge_model=None, all_mod
     )
 
 
-def run_phase2_plots(kge_model=None):
+def run_phase3_plots(kge_model=None):
     """Regenera loss curve + t-SNE de un modelo KGE ya entrenado."""
-    from phase2_plots import run
+    from phase3_plots import run
     run(kge_model_name=kge_model or 'TransE')
 
 
-def run_phase3(top_k=None, kge_model=None):
-    from phase3_link_prediction import run
-    run(top_k=top_k or cfg.TOP_K_PREDICT, model_name=kge_model or 'TransE')
-
-
-def run_phase4_rules():
-    """Aprende reglas Horn con AnyBURL (opcional; requiere Java). Fuera de --phase all."""
-    from phase4_learn_rules import run
-    run()
-
-
 def run_create_incident(kge_model=None, llm_model=None, no_llm=False, top_k=10):
-    from phase5_incident_creator import run
+    from phase4_incident_creator import run
     run(
         kge_model_name=kge_model or 'TransE',
         use_llm=not no_llm,
@@ -174,9 +165,9 @@ def run_create_incident(kge_model=None, llm_model=None, no_llm=False, top_k=10):
     )
 
 
-def run_phase6(kge_model=None, top_k=None, eval_jsonl=None):
+def run_phase5(kge_model=None, top_k=None, eval_jsonl=None):
     """Eval end-to-end del incident creator (cascada REGLA → KGE+CBR sobre data/evaluacion/test_eval_*.jsonl)."""
-    from phase6_eval_incident_creator import run, DEFAULT_EVAL_JSONL
+    from phase5_eval_incident_creator import run, DEFAULT_EVAL_JSONL
     run(
         kge_model_name=kge_model or 'TransE',
         top_k_values=tuple(top_k) if top_k else (1, 3, 5, 10),
@@ -187,7 +178,7 @@ def run_phase6(kge_model=None, top_k=None, eval_jsonl=None):
 def run_build_eval(n=500, seed=None, ttl=None, out=None):
     """Construye data/evaluacion/test_eval_<N>.jsonl + resumen de skips en
     out/evaluacion/test_eval_<N>_skips.txt"""
-    from phase6_build_eval import build_and_save
+    from phase5_build_eval import build_and_save
 
     ttl_path = Path(ttl) if ttl else cfg.TEST_TTL
     out_dir  = Path(out) if out else cfg.DATA_DIR / "evaluacion"
@@ -209,7 +200,7 @@ def main():
     parser.add_argument(
         "--phase",
         default="all",
-        choices=["all", "0", "1", "2", "2_plots", "3", "4", "6",
+        choices=["all", "0", "1", "2", "3", "3_plots", "5",
                  "build_eval", "create_incident"],
         help="Fase a ejecutar (default: all)",
     )
@@ -218,7 +209,7 @@ def main():
     parser.add_argument("--input", default=None,
                         help="Grafo de partida para phase 0 (.n3 o .ttl). "
                              "Por defecto data/incident_triplets.{ttl|n3}")
-    # Opciones Phase 2 — entrenamiento KGE
+    # Opciones Phase 3 — entrenamiento KGE
     parser.add_argument("--epochs", type=int, default=None,
                         help=f"Épocas de entrenamiento (default: {cfg.N_EPOCHS})")
     parser.add_argument("--dim",    type=int, default=None,
@@ -228,22 +219,22 @@ def main():
     parser.add_argument("--kge-model", default=None,
                         help=f"Modelo KGE (default: TransE). Opciones: {cfg.KGE_MODELS}")
     parser.add_argument("--all-models", action="store_true",
-                        help=f"Entrenar todos los modelos: {cfg.KGE_MODELS} (solo phase 2)")
-    # Opciones Phase 3
+                        help=f"Entrenar todos los modelos: {cfg.KGE_MODELS} (solo phase 3)")
+    # Opciones de top-k (creación de incidencias / evaluación)
     parser.add_argument("--top-k",  type=int, default=None,
-                        help=f"Top-k en link prediction (default: {cfg.TOP_K_PREDICT})")
+                        help=f"Top-k en la recomendación KGE+CBR (default: {cfg.TOP_K_PREDICT})")
     # Opciones create_incident
     parser.add_argument("--model",       default=None,
                         help=f"Modelo HuggingFace para LLM (default: {cfg.DEFAULT_MODEL})")
     parser.add_argument("--no-llm", action="store_true",
                         help="Desactivar LLM (solo KGE)")
-    # Opciones build_eval / 6
+    # Opciones build_eval / 5
     parser.add_argument("--n",           type=int, default=500,
                         help="Nº de incidencias para build_eval (default: 500)")
     parser.add_argument("--seed",        type=int, default=None,
                         help=f"Semilla para build_eval (default: {cfg.RANDOM_SEED})")
     parser.add_argument("--eval-jsonl",  default=None,
-                        help="JSONL de evaluación para --phase 6 "
+                        help="JSONL de evaluación para --phase 5 "
                              "(default: data/evaluacion/test_eval_500.jsonl)")
 
     args = parser.parse_args()
@@ -256,7 +247,7 @@ def main():
     print(f"{'='*60}\n")
 
     phases_to_run = (
-        ["0", "1", "2", "3", "create_incident"] if phase == "all" else [phase]
+        ["0", "2", "3", "create_incident"] if phase == "all" else [phase]
     )
 
     for p in phases_to_run:
@@ -264,20 +255,18 @@ def main():
         if p == "0":
             run_phase0(test_ratio=args.test_ratio, input_graph=args.input)
         elif p == "1":
-            run_phase1()
+            run_phase1_rules()
         elif p == "2":
-            run_phase2(
+            run_phase2()
+        elif p == "3":
+            run_phase3(
                 epochs=args.epochs, dim=args.dim, device=args.device,
                 kge_model=args.kge_model, all_models=args.all_models,
             )
-        elif p == "2_plots":
-            run_phase2_plots(kge_model=args.kge_model)
-        elif p == "3":
-            run_phase3(top_k=args.top_k, kge_model=args.kge_model)
-        elif p == "4":
-            run_phase4_rules()
-        elif p == "6":
-            run_phase6(
+        elif p == "3_plots":
+            run_phase3_plots(kge_model=args.kge_model)
+        elif p == "5":
+            run_phase5(
                 kge_model=args.kge_model,
                 top_k=args.top_k,
                 eval_jsonl=args.eval_jsonl,

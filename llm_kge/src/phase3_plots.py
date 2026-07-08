@@ -1,5 +1,5 @@
 """
-Fase 2 (plots) — Funciones de diagnóstico para modelos KGE y CLI para
+Fase 3 (plots) — Funciones de diagnóstico para modelos KGE y CLI para
 regenerar los plots de un modelo ya entrenado, sin reentrenar.
 
 Contenido del módulo:
@@ -24,13 +24,13 @@ Contenido del módulo:
                                               que el 2D solapa)
 
   CLI standalone
-    python src/phase2_plots.py --kge-model TransE
-    python src/phase2_plots.py --kge-model RotatE --n-per-type 5000
-    python src/phase2_plots.py --kge-model TransE --skip-tsne
-    python src/phase2_plots.py --kge-model TransE --skip-3d
-    python src/phase2_plots.py --kge-model TransE --skip-loss
+    python src/phase3_plots.py --kge-model TransE
+    python src/phase3_plots.py --kge-model RotatE --n-per-type 5000
+    python src/phase3_plots.py --kge-model TransE --skip-tsne
+    python src/phase3_plots.py --kge-model TransE --skip-3d
+    python src/phase3_plots.py --kge-model TransE --skip-loss
 
-Lee de disco lo que phase2_kge_train.py dejó:
+Lee de disco lo que phase3_kge_train.py dejó:
   out/models/<modelo>/results.json                (losses por época)
   out/models/<modelo>/training_triples/           (factory PyKEEN binario)
   out/embeddings/<modelo>/entity_embeddings.pt    (embeddings)
@@ -406,7 +406,7 @@ def run(
     if do_loss:
         if not results_json.exists():
             print(f"  [!] No encontrado: {results_json}\n"
-                  "      ¿Entrenaste este modelo con phase2_kge_train.py?")
+                  "      ¿Entrenaste este modelo con phase3_kge_train.py?")
         else:
             with open(results_json, encoding="utf-8") as f:
                 data = json.load(f)

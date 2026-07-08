@@ -1,8 +1,20 @@
-# LLM-KGE
+# LLM-KGE: Creación guiada de incidencias con Grafos de Conocimiento
 
 ## Descripción
 
 Este proyecto implementa un sistema **neuro-simbólico end-to-end** para la creación guiada de incidencias técnicas. El sistema combina tres fuentes de conocimiento en una **inferencia en cascada**, garantizando que siempre hay una respuesta y que cada sugerencia lleva su fuente de trazabilidad:
+
+<!--
+| Capa | Método | Fuente | Cuándo actúa |
+|------|--------|--------|--------------|
+| 1 | Reglas simbólicas Horn (AnyBURL + PyClause) | `RULE` | Si existe una regla aplicable (y el usuario no la rechaza) |
+| 2 | Link prediction KGE + recuperación CBR (fusión WRRF) | `KGE` / `CBR` | Si no hay regla, o el usuario rechaza la regla |
+| 3 | LLM conversacional (verbalización + extracción) | `USUARIO` | Siempre (interfaz) |
+-->
+
+<p align="center">
+  <img src="figuras/General_bien_2_opcional.png" alt="Arquitectura general del sistema" width="800">
+</p>
 
 | Capa | Método | Fuente | Cuándo actúa |
 |------|--------|--------|--------------|
@@ -12,9 +24,9 @@ Este proyecto implementa un sistema **neuro-simbólico end-to-end** para la crea
 
 La capa de reglas es **determinista y explicable**; el KGE+CBR es el **fallback probabilístico** que siempre devuelve candidatos. El LLM nunca inventa valores: solo formula preguntas y extrae la elección del usuario entre opciones verificadas por el grafo.
 
-**Dominio**: Sistema de gestión de incidencias técnicas en español.
+**Dominio**: gestión de incidencias técnicas en español.
 
-**Entidades**: incidencias, técnicos (internos/externos), clientes, grupos/equipos/categorías de soporte, estados, tipos, orígenes.
+**Entidades**: incidencias, técnicos (internos/externos), clientes, grupos/equipos/categorías de soporte, estados, tipos, orígenes, intervenciones.
 
 ---
 
@@ -50,14 +62,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Instalar PyClause**
+**Instalar PyClause** (motor de reglas):
 
 ```bash
 git clone https://github.com/symbolic-kg/PyClause
 cd PyClause
 pip install -e .
 ```
-
 <!--
 ### 3. Configurar Hugging Face 🤗
 
@@ -76,12 +87,11 @@ hf auth login
 
 - Introduce el token cuando se te solicite ✍️
 -->
-
 ---
 
 ## Configuración de Servidores
 
-### Servidor VLLM
+### Servidor vLLM
 
 Arranca el servidor en una terminal separada (requerido para las fases que usan LLM):
 
@@ -92,9 +102,8 @@ vllm serve meta-llama/Meta-Llama-3-8B-Instruct \
     --max-model-len 4096 \
     --tool-call-parser llama3_json
 ```
-
 <!--
-> **Nota sobre la GPU**: vLLM reserva casi toda la VRAM. Por eso, durante `create_incident` el modelo KGE se carga en **CPU** (el scoring de unos pocos proxies es trivial) y la GPU queda libre para vLLM. El entrenamiento (fase 2) y la evaluación (`6`) sí usan GPU.
+> **Nota sobre la GPU**: vLLM reserva casi toda la VRAM. Por eso, durante `create_incident` el modelo KGE se carga en **CPU** (el scoring de unos pocos proxies es trivial) y la GPU queda libre para vLLM. El entrenamiento (fase 3) y la evaluación (`6`) sí usan GPU.
 
 ---
 -->
@@ -112,25 +121,28 @@ KGE_master_tesis/
 │   │   └── train_full_incidents/
 │   │       └── rules-1000        # Reglas AnyBURL para incidencias (~5K reglas)
 │   ├── triples/
-│   │   └── train.tsv            # Tripletas planas (fase 1); el split 80/10/10
-│   │                            #   se hace en memoria dentro de la fase 2
+│   │   └── train.tsv            # Tripletas planas (fase 2); el split 80/10/10
+│   │                            #   se hace en memoria dentro de la fase 3
 │   └── evaluacion/              # JSONL de evaluación (build_eval)
 ├── src/
 │   ├── config.py                 # Parámetros globales y rutas
 │   ├── phase0_split.py           # incident_triplets → train_full.ttl + test_eval.ttl
-│   ├── phase1_triples.py         # Parseo RDF → TSV + mapas
-│   ├── phase2_kge_train.py       # Entrenamiento KGE (8 modelos PyKEEN)
-│   ├── phase2_plots.py           # Curvas de loss + t-SNE (sin reentrenar)
-│   ├── phase3_link_prediction.py # Link prediction (relaciones latentes)
-│   ├── phase4_learn_rules.py     # (opcional) Reglas Horn AnyBURL: split + learn
-│   ├── phase5_incident_creator.py# Creador guiado (RULE → KGE+CBR → LLM)
-│   ├── phase6_build_eval.py      # Prepara el JSONL de evaluación (build_eval)
-│   ├── phase6_eval_incident_creator.py # Evaluación end-to-end (6)
+│   ├── phase1_learn_rules.py     # (opcional) Reglas Horn AnyBURL: split + learn
+│   ├── phase2_triples.py         # Parseo RDF → TSV + mapas
+│   ├── phase3_kge_train.py       # Entrenamiento KGE (8 modelos PyKEEN)
+│   ├── phase3_plots.py           # Curvas de loss + t-SNE (sin reentrenar)
+│   ├── phase4_incident_creator.py# Creador guiado (RULE → KGE+CBR → LLM)  [fase 4]
+│   ├── phase5_build_eval.py      # Prepara el JSONL de evaluación (build_eval)
+│   ├── phase5_eval_incident_creator.py # Evaluación end-to-end  [fase 5]
 │   ├── utils/                     # Helpers (NO son fases; los importan las fases)
 │   │   ├── graph_utils.py        # Carga de grafos RDF, labels, plantillas ES
 │   │   ├── rule_engine.py        # Motor de reglas simbólico (PyClause + AnyBURL)
-│   │   └── llm_inference.py      # Cliente vLLM + verbalización de propiedades
-│   ├── rules/                     # Toolchain de reglas Horn (Fase 4, opcional)
+│   │   ├── cbr_engine.py         # Motor de razonamiento basado en casos (CBR + WRRF)
+│   │   ├── kge_inference.py      # Inferencia KGE (carga de modelo, scoring, KGEScorer)
+│   │   ├── link_prediction.py    # Link prediction: minería de relaciones latentes (diagnóstico)
+│   │   ├── llm_inference.py      # Cliente vLLM + verbalización de propiedades
+│   │   └── analyze_graph.py      # Análisis estructural del grafo (CLI: densidad, cardinalidad, conectividad)
+│   ├── rules/                     # Toolchain de reglas Horn (Fase 1, opcional)
 │   │   ├── split_train_full.py   # Divide train_full.ttl en splits temáticos
 │   │   └── learn_rules_splits.py # Aprende reglas AnyBURL por split
 │   └── run_pipeline.py           # Orquestador del pipeline
@@ -147,18 +159,17 @@ KGE_master_tesis/
 └── README.md
 ```
 -->
-
 ---
 
 ## Ejecución del Pipeline paso a paso
 
 <p align="center">
-  <img src="figuras/General_2.png" alt="Arquitectura general del sistema" width="400">
+  <img src="figuras/General_git.png" alt="Arquitectura general del sistema" width="400">
 </p>
 
-> Las dependencias entre fases son: **0 → 1 → 2 → 3 → 5 (create_incident)**, con la **fase 4 (reglas, opcional)** colgando de la fase 0, y **build_eval → 6** para la evaluación.
+> Las dependencias entre fases son: **0 → 2 → 3 → create_incident (fase 4)**, con la **fase 1 (reglas, opcional)** colgando de la fase 0, y **build_eval → 5** para la evaluación. La fase 1 queda **fuera de `--phase all`** (requiere Java y el aprendizaje es lento), por lo que `--phase all` ejecuta **0 → 2 → 3 → create_incident**.
 
-### Fase 0 — Partición de Datos (conversión N3→TTL + split train/eval)
+### Fase 0 — Partición de Datos (conversión N3→TTL + partición 95/5)
 
 ```bash
 python src/run_pipeline.py --phase 0
@@ -166,7 +177,7 @@ python src/run_pipeline.py --phase 0
 
 **Entrada — el grafo de partida** (en `data/`):
 - Por defecto el pipeline arranca de un grafo **`incident_triplets.n3`** (formato N3), que esta fase convierte a Turtle (`incident_triplets.ttl`) con rdflib.
-- También puedes **empezar directamente con un `.ttl`**: si ya existe `data/incident_triplets.ttl`, la conversión se **omite** y se usa ese fichero tal cual.
+- También puedes **empezar directamente con un `.ttl`**: si ya existe `data/incident_triplets.ttl`, la conversión se **omite** y se usa ese fichero tal cual. (Si quieres forzar la reconversión desde el `.n3`, borra antes el `.ttl`.)
 - **Grafo arbitrario con `--input`**: puedes partir de cualquier grafo `.n3` o `.ttl` que indiques.
 
 ```bash
@@ -177,71 +188,15 @@ Después, divide el grafo en `train_full.ttl` (95%) y `test_eval.ttl` (5%). El c
 
 ---
 
-### Fase 1 — Parsear el grafo a tripletas TSV
+### Fase 1 — Aprender reglas Horn con AnyBURL (opcional)
+
+Aprende reglas simbólicas sobre splits temáticos del grafo. Solo depende de `train_full.ttl` (fase 0), por lo que puede ejecutarse en paralelo a la rama KGE (fases 2–4). Es **opcional**, requiere Java y queda **fuera de `--phase all`** (las reglas cambian poco y el aprendizaje es lento). Un solo comando ejecuta los dos pasos:
 
 ```bash
 python src/run_pipeline.py --phase 1
 ```
 
-**Entrada**: `data/train_full.ttl`
-**Salida**:
-- `data/triples/train.tsv` (todas las tripletas de entrenamiento, sin split en disco)
-- `out/maps/entity_to_id.json`, `out/maps/relation_to_id.json`
-
-El split 80/10/10 (train/valid/test) se realiza **en memoria** dentro de la fase 2, propagando el mismo vocabulario de entidades a todos los splits.
-
----
-
-### Fase 2 — Entrenar el modelo KGE (TransE por defecto)
-
-```bash
-python src/run_pipeline.py --phase 2
-```
-
-Entrena con CUDA automáticamente. Modelos disponibles: **TransE, RotatE, TransH, HAKE, DistMult, ComplEx, TorusE, PairRE**.
-
-**Salida**:
-- `out/models/<modelo>/` (modelo completo + training factory PyKEEN)
-- `out/embeddings/<modelo>/{entity,relation}_embeddings.pt`
-
-**Otras opciones**:
-
-```bash
-# Elegir otro modelo
-python src/run_pipeline.py --phase 2 --kge-model TransE
-
-# Entrenar todos los modelos secuencialmente (genera comparativa)
-python src/run_pipeline.py --phase 2 --all-models
-
-# Regenerar curvas de loss + t-SNE sin reentrenar
-python src/run_pipeline.py --phase 2_plots --kge-model TransE
-
-# Ajustar hiperparámetros
-python src/run_pipeline.py --phase 2 --epochs 50 --dim 64 --device cpu
-```
-
----
-
-### Fase 3 — Inferencia de relaciones latentes (link prediction)
-
-```bash
-python src/run_pipeline.py --phase 3
-python src/run_pipeline.py --phase 3 --kge-model TransE
-```
-
-**Salida**: `out/predictions/implicit_relations.json` (top-K predicciones implícitas por entidad).
-
----
-
-### Fase 4 — Aprender reglas Horn con AnyBURL (opcional)
-
-Aprende reglas simbólicas sobre splits temáticos del grafo. Es **opcional**, requiere Java y queda **fuera de `--phase all`**. Un solo comando ejecuta los dos pasos:
-
-```bash
-python src/run_pipeline.py --phase 4
-```
-
-Internamente [`phase4_learn_rules.py`](src/phase4_learn_rules.py) orquesta:
+Internamente [`phase1_learn_rules.py`](src/phase1_learn_rules.py) orquesta:
 
 1. **`split_train_full.py`** — divide `data/train_full.ttl` por tipo de entidad del sujeto (`incident_`, `intervention_`, `employee_`) y genera en `data/train_splits/` los ficheros `train_full_incidents.ttl`, `train_full_interventions.ttl`, `train_full_incidents_interventions.ttl`, `train_full_interventions_employees.ttl` y `train_full_employees.ttl`.
 2. **`learn_rules_splits.py`** — procesa cada `train_full_*.ttl` de forma independiente: convierte `.ttl → .tsv`, escribe un `config-learn.properties` y ejecuta AnyBURL, guardando las reglas de cada split en `data/reglas/<nombre_del_split>/`. Descarga el JAR de AnyBURL e instala Java si falta.
@@ -256,12 +211,57 @@ Las reglas quedan listas para cargarse en la fase 5 (`create_incident`) y en la 
 
 ---
 
-### Fase 5 — create_incident: crear una incidencia guiada (RULE → KGE+CBR → LLM)
+### Fase 2 — Parsear el grafo a tripletas TSV
+
+```bash
+python src/run_pipeline.py --phase 2
+```
+
+**Entrada**: `data/train_full.ttl`
+**Salida**:
+- `data/triples/train.tsv` (todas las tripletas de entrenamiento, sin split en disco)
+- `out/maps/entity_to_id.json`, `out/maps/relation_to_id.json`
+
+El split 80/10/10 (train/valid/test) se realiza **en memoria** dentro de la fase 3, propagando el mismo vocabulario de entidades a todos los splits.
+
+---
+
+### Fase 3 — Entrenar el modelo KGE (TransE por defecto)
+
+```bash
+python src/run_pipeline.py --phase 3
+```
+
+Entrena con CUDA automáticamente. Modelos disponibles: **TransE, RotatE, TransH, HAKE, DistMult, ComplEx, TorusE, PairRE**.
+
+**Salida**:
+- `out/models/<modelo>/` (modelo completo + training factory PyKEEN)
+- `out/embeddings/<modelo>/{entity,relation}_embeddings.pt`
+
+**Otras opciones**:
+
+```bash
+# Elegir otro modelo
+python src/run_pipeline.py --phase 3 --kge-model TransE
+
+# Entrenar todos los modelos secuencialmente (genera comparativa)
+python src/run_pipeline.py --phase 3 --all-models
+
+# Regenerar curvas de loss + t-SNE sin reentrenar
+python src/run_pipeline.py --phase 3_plots --kge-model TransE
+
+# Ajustar hiperparámetros
+python src/run_pipeline.py --phase 3 --epochs 50 --dim 64 --device cpu
+```
+
+---
+
+### Fase 4 — create_incident: crear una incidencia guiada (RULE → KGE+CBR → LLM)
 
 Para cada campo de la incidencia el sistema sigue la **inferencia en cascada**:
 
 <p align="center">
-  <img src="figuras/pipeline_incident_creator_vertical.png" alt="Pipeline del Incident Creator" width="800">
+  <img src="figuras/pipeline_fase4_bueno_vertical.png" alt="Pipeline del Incident Creator" width="800">
 </p>
 
 1. **RULE** — PyClause comprueba si alguna regla AnyBURL infiere el valor. Si la hay, muestra la sugerencia con `rule_id` y `confidence`.
@@ -291,7 +291,7 @@ python src/run_pipeline.py --phase create_incident --kge-model TransE
 
 ---
 
-### Fase 6 — Evaluación end-to-end
+### Fase 5 — Evaluación end-to-end
 
 **1) Construir el conjunto de evaluación** (extrae incidencias de `test_eval.ttl` a un JSONL; los campos ausentes se marcan `skip`):
 
@@ -303,9 +303,9 @@ python src/run_pipeline.py --phase build_eval --n 1000
 **2) Evaluar la cascada** sobre ese JSONL:
 
 ```bash
-python src/run_pipeline.py --phase 6
-python src/run_pipeline.py --phase 6 --kge-model TransE
-python src/run_pipeline.py --phase 6 --eval-jsonl data/evaluacion/test_eval_500.jsonl
+python src/run_pipeline.py --phase 5
+python src/run_pipeline.py --phase 5 --kge-model TransE
+python src/run_pipeline.py --phase 5 --eval-jsonl data/evaluacion/test_eval_500.jsonl
 ```
 
 Para cada incidencia y campo:
@@ -317,7 +317,7 @@ Para cada incidencia y campo:
 
 ---
 
-### Pipeline completo (fases 0 → 1 → 2 → 3 → create_incident)
+### Pipeline completo (fases 0 → 2 → 3 → create_incident)
 
 ```bash
 python src/run_pipeline.py --phase all
@@ -335,7 +335,7 @@ Todos los parámetros centralizados en `src/config.py`:
 | `N_EPOCHS` | 100 | Épocas de entrenamiento |
 | `BATCH_SIZE` | 5500 | Batch size (reduce si hay OOM en GPU) |
 | `NEG_PER_POS` | 10 | Negativos por tripleta positiva |
-| `TRAIN_RATIO` / `VALID_RATIO` | 0.80 / 0.10 | Split interno en fase 2 (test = 0.10) |
+| `TRAIN_RATIO` / `VALID_RATIO` | 0.80 / 0.10 | Split interno en fase 3 (test = 0.10) |
 | `RRF_K` | 60 | Constante de suavizado WRRF (estándar IR) |
 | `W_KGE` / `W_CBR` | 0.7 / 0.3 | Pesos de la fusión KGE+CBR (suman 1) |
 | `VLLM_BASE_URL` | `http://localhost:8000/v1` | Endpoint del servidor vLLM |

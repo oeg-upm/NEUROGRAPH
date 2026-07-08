@@ -1,5 +1,5 @@
 """
-Fase 2 — Entrenamiento de modelos KGE con PyKEEN.
+Fase 3 — Entrenamiento de modelos KGE con PyKEEN.
 
 Modelos soportados:
   Traslacionales (buenos para jerarquías):
@@ -11,7 +11,7 @@ Modelos soportados:
     DistMult — producto escalar, simétrico
     ComplEx  — espacio complejo, modela asimetría
 
-Requisito previo: ejecutar phase1_triples.py para generar los TSV.
+Requisito previo: ejecutar phase2_triples.py para generar los TSV.
 
 Salida por modelo (ej. RotatE):
   out/models/rotate/           (modelo PyKEEN completo)
@@ -19,11 +19,11 @@ Salida por modelo (ej. RotatE):
   out/embeddings/rotate/relation_embeddings.pt
 
 Uso:
-  python src/phase2_kge_train.py                        # DistMult (por defecto)
-  python src/phase2_kge_train.py --model RotatE
-  python src/phase2_kge_train.py --model HAKE
-  python src/phase2_kge_train.py --all-models           # entrena todos secuencialmente
-  python src/phase2_kge_train.py --epochs N --dim D --device cpu|cuda
+  python src/phase3_kge_train.py                        # DistMult (por defecto)
+  python src/phase3_kge_train.py --model RotatE
+  python src/phase3_kge_train.py --model HAKE
+  python src/phase3_kge_train.py --all-models           # entrena todos secuencialmente
+  python src/phase3_kge_train.py --epochs N --dim D --device cpu|cuda
 """
 
 import argparse
@@ -88,6 +88,12 @@ def _model_config(model_lower: str, dim: int, margin: float) -> dict:
         "rotate":   {**nssa, "model_kwargs": dict(embedding_dim=dim)},
         # TransH: proyecta entidades en hiperplanos específicos por relación
         "transh":   {**nssa, "model_kwargs": dict(embedding_dim=dim)},
+        # TorusE: traslación sobre un toro compacto (grupo de Lie). Modelo
+        # basado en distancia -> misma config que los traslacionales.
+        "toruse":   {**nssa, "model_kwargs": dict(embedding_dim=dim)},
+        # PairRE: distancia con dos vectores de relación (escala cabeza/cola).
+        # Como RotatE/TransE, se beneficia de NSSALoss + bernoulli.
+        "pairre":   {**nssa, "model_kwargs": dict(embedding_dim=dim)},
         # HAKE: módulo captura nivel jerárquico, fase captura diferencia semántica
         "hake":     {**nssa, "model_kwargs": dict(embedding_dim=dim)},
         "distmult": {**nssa,  "model_kwargs": dict(embedding_dim=dim)},
@@ -108,14 +114,14 @@ def _model_config(model_lower: str, dim: int, margin: float) -> dict:
 # ---------------------------------------------------------------------------
 # Plots de diagnóstico
 # ---------------------------------------------------------------------------
-# Las funciones de plot viven en phase2_plots.py. Aquí solo se importan.
+# Las funciones de plot viven en phase3_plots.py. Aquí solo se importan.
 #   _plot_loss_curve       curva de pérdida
 #   _plot_tsne_embeddings  t-SNE 2D estratificado por tipo (balanceado)
 # Al final de train() se generan loss + t-SNE estratificado 2D. El t-SNE 3D
-# estratificado y el aleatorio se dejan para phase2_plots.py vía CLI.
+# estratificado y el aleatorio se dejan para phase3_plots.py vía CLI.
 # ---------------------------------------------------------------------------
 
-from phase2_plots import _plot_loss_curve, _plot_tsne_embeddings
+from phase3_plots import _plot_loss_curve, _plot_tsne_embeddings
 
 
 def train(
@@ -132,13 +138,13 @@ def train(
     from pykeen.triples import TriplesFactory
 
     print("=" * 60)
-    print(f"FASE 2 — Entrenamiento {model_name} con PyKEEN")
+    print(f"FASE 3 — Entrenamiento {model_name} con PyKEEN")
     print("=" * 60)
 
     if not cfg.TRAIN_TSV.exists():
         raise FileNotFoundError(
             f"No encontrado: {cfg.TRAIN_TSV}\n"
-            "Ejecuta primero:  python src/phase1_triples.py"
+            "Ejecuta primero:  python src/phase2_triples.py"
         )
 
     # Algunos modelos (ConvE) requieren relaciones inversas. Se decide aquí,
@@ -251,14 +257,14 @@ def train(
     print(f"      relation_embeddings.pt shape: {list(relation_embs.shape)}")
 
     # Los mapas entity_to_id y relation_to_id son compartidos entre modelos,
-    # así que se guardan en MAPS_DIR (ya generados por fase 1)
+    # así que se guardan en MAPS_DIR (ya generados por fase 2)
     # No es necesario volver a guardarlos aquí
 
     # Plots de diagnóstico: curva de loss + t-SNE estratificado (balanceado por
     # tipo, la vista útil para ver si el KGE separa tipos). Cada figura lleva en
     # el nombre <modelo>_<kind>_<timestamp> para que los entrenamientos
     # sucesivos no se sobreescriban. El t-SNE 3D estratificado (y el aleatorio,
-    # si se quiere) se generan aparte con `python src/phase2_plots.py --kge-model <X>`.
+    # si se quiere) se generan aparte con `python src/phase3_plots.py --kge-model <X>`.
     plot_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_figures_dir = cfg.OUT_DIR / "figures" / model_name.lower()
     _plot_loss_curve(result, model_name, out_figures_dir, plot_ts)
@@ -287,7 +293,7 @@ def train(
         device=device,
     )
 
-    print(f"\n✓ Fase 2 completada para {model_name}.")
+    print(f"\n✓ Fase 3 completada para {model_name}.")
     return result
 
 

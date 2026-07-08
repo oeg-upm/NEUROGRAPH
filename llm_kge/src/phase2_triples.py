@@ -1,5 +1,5 @@
 """
-Fase 1 — Parseo del grafo RDF a tripletas TSV para PyKEEN.
+Fase 2 — Parseo del grafo RDF a tripletas TSV para PyKEEN.
 
 Lee train_full.ttl (el 95% generado por la fase 0, con el 5% de test ya
 reservado en test_eval.ttl) y vuelca todas las tripletas en un único
@@ -11,8 +11,8 @@ Salida:
   out/maps/relation_to_id.json
 
 Uso:
-  python src/phase1_triples.py
-  python src/run_pipeline.py --phase 1
+  python src/phase2_triples.py
+  python src/run_pipeline.py --phase 2
 """
 
 import json
@@ -97,7 +97,7 @@ def build_and_save_mappings(
 
 def run() -> None:
     print("=" * 60)
-    print("FASE 1 — Parseo del grafo RDF a tripletas TSV")
+    print("FASE 2 — Parseo del grafo RDF a tripletas TSV")
     print("  train_full.ttl → train.tsv (sin split)")
     print("=" * 60)
 
@@ -126,7 +126,7 @@ def run() -> None:
     print("[3/3] Generando mapas entidad/relación → id ...")
     build_and_save_mappings(all_triples)
 
-    print("\n✓ Fase 1 completada.")
+    print("\n✓ Fase 2 completada.")
 
 
 if __name__ == "__main__":
