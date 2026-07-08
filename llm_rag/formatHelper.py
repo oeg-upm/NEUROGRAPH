@@ -37,7 +37,7 @@ def extraer_cliente(texto): # Detecta el nombre raro interno, no los "reales". S
     Busca y extrae el identificador de la compañía (company__) de un texto dado.
     """
 
-    patron = r"company__[A-Z0-9]+|\bss\b"
+    patron = r"company_+[A-Z0-9\-]+|\bss\b"
     
     coincidencia = re.search(patron, texto)
     
@@ -81,7 +81,7 @@ def formatear_para_llm(ruta_fichero, tipo_cond):
         str_if = " y ".join(str(v) for v in if_condiciones.values())
 
         # Formateamos según el tipo de regla
-        if tipo_regla == "noValid":
+        if tipo_regla == "nv":
             frase = f"Regla noValid. Si hay {str_if} NO ES POSIBLE {str_then}."
             if frase not in textos_generados:
                 textos_generados.append(frase)
@@ -105,11 +105,18 @@ def formatear_para_llm(ruta_fichero, tipo_cond):
 
 
 
+import json
+# import config
+
+import json
+# Asumo que config está importado en tu código original
+# import config
 
 def aplicar_reglas(ruta_fichero, mis_datos, cat_buscar, graph_data, contadores):
     """
     Evalúa las reglas del JSON contra el estado actual de la conversación (mis_datos).
     Modifica graph_data en función de las reglas 'noValid' y 'df'.
+    Imprime el número de la regla que se está aplicando.
     """
     if not graph_data:
         return graph_data
@@ -125,51 +132,153 @@ def aplicar_reglas(ruta_fichero, mis_datos, cat_buscar, graph_data, contadores):
         print("Error: El fichero no contiene un JSON válido.")
         return graph_data
 
-    # Extraemos el nombre del predicado que estamos intentando rellenar
-    # Asume que config.DICCIONARIO_PREDICADOS es accesible globalmente
     predicado_actual = config.DICCIONARIO_PREDICADOS[cat_buscar]
 
-    for regla in reglas:
+    # --- FASE 1: Buscar qué reglas se van a activar ---
+    reglas_aplicables = []
+    
+    # Usamos enumerate para obtener el número de regla (empezando por 1)
+    for numero_regla, regla in enumerate(reglas, start=1):
         if_condiciones = regla.get("if", {})
         then_consecuencias = regla.get("then", {})
-        tipo_regla = regla.get("ruleType")
-
-        # 2. Verificar si las condiciones del "if" se cumplen en el estado actual
-        # Buscamos si los valores requeridos por la regla ya están guardados en mis_datos
+        
         condiciones_cumplidas = all(valor in mis_datos for valor in if_condiciones.values())
 
-        if condiciones_cumplidas:
-            # 3. Comprobar si la regla afecta a la categoría actual que estamos buscando
-            if predicado_actual in then_consecuencias:
-                valor_regla = then_consecuencias[predicado_actual]
+        if condiciones_cumplidas and predicado_actual in then_consecuencias:
+            # Guardamos una tupla con el número de regla y la regla en sí
+            reglas_aplicables.append((numero_regla, regla))
 
-                # REGLA: noValid (Invalida la opción actual)
-                if tipo_regla == "noValid":
-                    # Si el valor propuesto por GraphRAG es el que la regla prohíbe
-                    if graph_data[0] == valor_regla:
-                        print(f"\n[Regla Aplicada - noValid] '{valor_regla}' no es válido para '{predicado_actual}'.")
-                        print("[Regla Aplicada] Descartando opción principal. Saltando a la siguiente opción.")
-                        
-                        # Eliminamos la opción prohibida. El segundo valor sube a la posición [0]
-                        graph_data.pop(0)
-                        contadores["vecesnv"] += 1
-                        if not graph_data:
-                            print("[Advertencia] Nos hemos quedado sin opciones válidas en graph_data.")
-                            break 
+    # --- FASE 2: Alerta de colisión y forzar contadores ---
+    multi_regla = len(reglas_aplicables) >= 2
 
-                # REGLA: df (Valor por defecto)
-                elif tipo_regla == "df":
-                    print(f"\n[Regla Aplicada - df] Forzando el valor por defecto: '{valor_regla}'.")
-                    
-                    # Si el valor ya estaba en la lista, lo sacamos para no duplicar
-                    if valor_regla in graph_data:
-                        graph_data.remove(valor_regla)
-                    
-                    # Insertamos el valor por defecto en la posición principal [0]
-                    contadores["vecesdf"] += 1
-                    graph_data.insert(0, valor_regla)
+    
+    
+    if multi_regla:
+        print(f"\n[ALERTA] ¡Se van a activar {len(reglas_aplicables)} reglas al mismo tiempo para '{predicado_actual}'!")
+        for regla in reglas_aplicables:
+            print("Con reglas:")
+            print(regla[0])
+        
+        print("[ALERTA] Forzando el valor 2 en los contadores 'vecesdf' y 'vecesnv'.")
+        
+        # Forzamos ambos valores a 2
+        contadores["vecesdf"] = 2
+        contadores["vecesnv"] = 2
 
-    return graph_data
+    # --- FASE 3: Aplicar las reglas ---
+    # Desempaquetamos la tupla para obtener el número de la regla
+    la_buena = -1
+    
+    for numero_regla, regla in reglas_aplicables:
+        then_consecuencias = regla.get("then", {})
+        tipo_regla = regla.get("ruleType")
+        valor_regla = then_consecuencias[predicado_actual]
+
+        if tipo_regla == "df":
+            print(f"\n[Regla Aplicada - df] (Regla #{numero_regla}) Forzando el valor por defecto: '{valor_regla}'.")
+            la_buena = numero_regla
+            if valor_regla in graph_data:
+                graph_data.remove(valor_regla)
+            
+            # Solo asignamos 1 si NO estamos en un escenario de múltiples reglas
+            if not multi_regla:
+                contadores["vecesdf"] = 1
+                
+            graph_data.insert(0, valor_regla)
+
+        elif tipo_regla == "nv":
+            if graph_data and graph_data[0] == valor_regla:
+                print(f"\n[Regla Aplicada - noValid] (Regla #{numero_regla}) '{valor_regla}' no es válido para '{predicado_actual}'.")
+                print(f"[Regla Aplicada] (Regla #{numero_regla}) Descartando opción principal. Saltando a la siguiente opción.")
+                la_buena = numero_regla
+
+                graph_data.pop(0)
+
+                # Solo asignamos 1 si NO estamos en un escenario de múltiples reglas y estaba en 0
+                if not multi_regla and contadores["vecesnv"] == 0:
+                    contadores["vecesnv"] = 1
+                
+                if not graph_data:
+                    print("[Advertencia] Nos hemos quedado sin opciones válidas en graph_data.")
+                    break 
+
+    return graph_data, la_buena
+
+
+
+#def aplicar_reglas(ruta_fichero, mis_datos, cat_buscar, graph_data, contadores):
+#    """
+#    Evalúa las reglas del JSON contra el estado actual de la conversación (mis_datos).
+#    Modifica graph_data en función de las reglas 'noValid' y 'df'.
+#    """
+#    if not graph_data:
+#        return graph_data
+#
+#    # 1. Cargar el JSON de reglas
+#    try:
+#        with open(ruta_fichero, 'r', encoding='utf-8') as f:
+#            reglas = json.load(f)
+#    except FileNotFoundError:
+#        print(f"Error: No se encontró el fichero '{ruta_fichero}'.")
+#        return graph_data
+#    except json.JSONDecodeError:
+#        print("Error: El fichero no contiene un JSON válido.")
+#        return graph_data
+#
+#    # Extraemos el nombre del predicado que estamos intentando rellenar
+#    # Asume que config.DICCIONARIO_PREDICADOS es accesible globalmente
+#    predicado_actual = config.DICCIONARIO_PREDICADOS[cat_buscar]
+#
+#
+#    
+#
+#    
+#    for regla in reglas:
+#        if_condiciones = regla.get("if", {})
+#        then_consecuencias = regla.get("then", {})
+#        tipo_regla = regla.get("ruleType")
+#
+#        # 2. Verificar si las condiciones del "if" se cumplen en el estado actual
+#        # Buscamos si los valores requeridos por la regla ya están guardados en mis_datos
+#        condiciones_cumplidas = all(valor in mis_datos for valor in if_condiciones.values())
+#
+#        if condiciones_cumplidas:
+#            # 3. Comprobar si la regla afecta a la categoría actual que estamos buscando
+#            if predicado_actual in then_consecuencias:
+#                valor_regla = then_consecuencias[predicado_actual]
+#
+#                
+#                if tipo_regla == "df":
+#                    print(f"\n[Regla Aplicada - df] Forzando el valor por defecto: '{valor_regla}'.")
+#                    
+#                    # Si el valor ya estaba en la lista, lo sacamos para no duplicar
+#                    
+#                    if valor_regla in graph_data:
+#                        graph_data.remove(valor_regla)
+#                    
+#                    # Insertamos el valor por defecto en la posición principal [0]
+#                    contadores["vecesdf"] = 1
+#                    graph_data.insert(0, valor_regla)
+#                
+#                elif tipo_regla == "noValid":
+#                    # Si el valor propuesto por GraphRAG es el que la regla prohíbe
+#                    if graph_data[0] == valor_regla:
+#                        print(f"\n[Regla Aplicada - noValid] '{valor_regla}' no es válido para '{predicado_actual}'.")
+#                        print("[Regla Aplicada] Descartando opción principal. Saltando a la siguiente opción.")
+#                        
+#                        # Eliminamos la opción prohibida. El segundo valor sube a la posición [0]
+#                        graph_data.pop(0)
+#
+#                        if contadores["vecesnv"] == 0:
+#                            contadores["vecesnv"] = 1
+#                        if not graph_data:
+#                            print("[Advertencia] Nos hemos quedado sin opciones válidas en graph_data.")
+#                            break 
+#
+#                # REGLA: df (Valor por defecto)
+#                
+#
+#    return graph_data
 
 
 

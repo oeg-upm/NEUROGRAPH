@@ -7,12 +7,12 @@ from openai import OpenAI, AsyncOpenAI
 TTL_FILE_PATH = "incident_triplets_convertido.ttl"
 #TTL_FILE_PATH = "filtrado.ttl"
 TTL_FORMAT = "turtle"
-
+     
 # ==========================================
 # CONFIGURACIÓN DEL MODELO DE LENGUAJE (LLM)
 # ==========================================
-#MI_MODELO = "llama3.1:70b"
-MI_MODELO = "llama3"
+MI_MODELO = "llama3.1:70b"
+#MI_MODELO = "llama3"
 # Configuración del cliente API (Ollama local o servicios en la nube)
 #"http://localhost:11434/v1"
 API_BASE_URL = "http://localhost:11434/v1"

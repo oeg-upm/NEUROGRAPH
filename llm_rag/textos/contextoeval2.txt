@@ -120,11 +120,42 @@ repcon:hasSupportCategory repcon:supportCategory_1497610291762302622 ;
 repcon:hasTypeInc repcon:typeIncident__7 ;
 
 DATOS EXTRAÍDOS NUEVOS:
-El campo a rellenar es hasTypeInc y estas son las opciones:
+El campo a rellenar es incident_hasOrigin y estas son las opciones:
 
-repcon:hasTypeInc repcon:incidentOrigin__3
+repcon:incident_hasOrigin repcon:incidentOrigin__3
 
 Se espera que extraigas el campo incidentOrigin
+
+GraphRAG: "ERROR"
+
+
+-----
+
+REGLAS:
+Regla df. Si hay company__3S8A2Y7FV EL VALOR POR DEFECTO ES employee__429.
+Regla df. Si hay company__P8EM3ZO35 y supportTeam_14976254341762302678 EL VALOR POR DEFECTO ES employee__366.
+Regla noValid. Si hay supportGroup_149761041762302662 NO ES POSIBLE employee__136. 
+Regla noValid. Si hay company__3S8A2Y7FV NO ES POSIBLE employee__430. 
+Regla df. Si hay company__1GR6455ID y incidentOrigin__2 EL VALOR POR DEFECTO ES employee__259. 
+Regla df. Si hay incidentOrigin__3 y supportGroup_149762611762302662 EL VALOR POR DEFECTO ES employee__429. 
+Regla df. Si hay company__UQHIM9QXH EL VALOR POR DEFECTO ES employee__486. 
+Regla noValid. Si hay company__QEKM1ZL0K NO ES POSIBLE employee__108. 
+Regla noValid. Si hay supportCategory_149761881762302662 NO ES POSIBLE employee__108. 
+Regla noValid. Si hay supportCategory_149765491762302662 NO ES POSIBLE employee__266. 
+Regla noValid. Si hay supportCategory_1497611981762302662 NO ES POSIBLE employee__366.
+DATOS EXISTENTES:
+repcon:int_hasCustomer repcon:company__D52NKD9SS ;
+repcon:hasSupportCategory repcon:supportCategory_1497611981762302662 ;
+repcon:hasTypeInc repcon:typeIncident__1 ;
+repcon:incident_hasOrigin incidentOrigin__2
+repcon:hasSupportGroup supportGroup_14976631762302662
+
+DATOS EXTRAÍDOS NUEVOS:
+El campo a rellenar es hasTechnician y estas son las opciones:
+
+repcon:hasTechnician repcon:employee__366
+
+Se espera que extraigas el campo employee
 
 GraphRAG: "ERROR"
 
@@ -140,7 +171,7 @@ DATOS EXISTENTES:
 repcon:int_hasCustomer repcon:company__UPFP8CUEG ;
 repcon:hasSupportCategory repcon:supportCategory_1497610291762302622 ;
 repcon:hasTypeInc repcon:typeIncident__1 ;
-repcon:hasTypeInc repcon:incidentOrigin__1 ;
+repcon:incident_hasOrigin repcon:incidentOrigin__1 ;
 
 DATOS EXTRAÍDOS NUEVOS:
 

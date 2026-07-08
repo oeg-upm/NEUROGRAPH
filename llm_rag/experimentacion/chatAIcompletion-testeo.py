@@ -51,13 +51,6 @@ graph.parse(
 print("Grafo cargado correctamente")
 print(f"Número de triples: {len(graph)}")
 
-client = OpenAI(
-    base_url="http://localhost:11434/v1",
-    api_key="ollama"
-)
-
-mi_modelo = "mistral:latest"
-print(f"Modelo configurado: {mi_modelo}")
 
 
 # ============================================
@@ -88,8 +81,11 @@ def timestamp_to_datetime(unix_time):
     return datetime.datetime.fromtimestamp(unix_time).strftime("%A, %B %d, %Y at %I:%M%p %Z")
 
 
-def elemento_mas_comun(array):
-    return max(array, key=array.count)
+def primer_elemento_valido(array):
+    for elemento in array:
+        if elemento is not None and elemento != "ERROR":
+            return elemento
+    return None  # Retorna None si todos son None o "ERROR"
 
 
 # ============================================
@@ -146,6 +142,103 @@ async def text_completion_batch(prompts_list, engine=config.MI_MODELO):
     return results
 
 
+
+
+def completar_siguiente_campo(mis_datos):
+
+    if None not in mis_datos and 'None' not in mis_datos:
+        print(f'\nGraphRAG: query acabada. La query es {mis_datos}')
+        return False, mis_datos
+    
+    try:
+        cat_buscar = mis_datos.index(None)
+    except ValueError:
+        cat_buscar = mis_datos.index('None')
+
+        # ----------------------------------------
+        # CONSULTA AL GRAFO RDF
+        # ----------------------------------------
+    graph_data = buscar_frecuentes_por_opcion(graph, mis_datos, cat_buscar)
+    if not graph_data:
+        graph_data = inferir_valor_adecuado(graph, mis_datos, cat_buscar)
+    # ----------------------------------------
+    # LÓGICA DE REINTENTOS Y LLM
+    # ----------------------------------------
+    max_a_probar = len(graph_data) if graph_data else 0
+    siguiente_a_probar = 1
+    retry = True
+    while retry:
+        retry = False
+        #prev_conv = open_file(log_file_path)
+        if not graph_data:
+            data = "No se encontraron datos. Seguramente sea un error por parte del usuario. Pregunta si se ha introducido bien el grupo."
+        else:
+            mi_opcion = graph_data[0]
+            if retry and siguiente_a_probar < max_a_probar:
+                mi_opcion = graph_data[siguiente_a_probar]
+                siguiente_a_probar += 1
+            data = (
+                f"El campo a rellenar es "
+                f"{config.DICCIONARIO_PREFIJOS[cat_buscar]}"
+                f" y estas son las opciones:\n\nrepcon:"
+                f"{config.DICCIONARIO_PREFIJOS[cat_buscar]}"
+                f" repcon:{mi_opcion}"
+            )
+        # Preparar prompt
+        reglas = formatear_para_llm(
+            './textos/reglas_incidentes.json',
+            tipo_cond=config.DICCIONARIO_PREDICADOS[cat_buscar]
+        )
+        prompt_base = open_file(config.CONTEXTO_FILE_PATH)
+        mensajeinstruc = "Se espera que extraigas el campo " + config.DICCIONARIO_PREFIJOS[cat_buscar]
+        datos_existentes = formatear_datos_existentes_LLM(graph_data)
+        prompt = (
+            prompt_base
+            .replace('<<DATOS>>', data)
+            .replace('<<CONVERSACIÓN>>', datos_existentes)
+            .replace('<<MENSAJE>>', mensajeinstruc)
+            .replace('<<REGLAS>>', "\n".join(reglas))
+        )
+        # Ejecutar LLM en paralelo usando asyncio (proveniente del Script 1)
+        outputs = asyncio.run(text_completion_batch([prompt, prompt, prompt]))
+        # Procesar y limpiar respuesta
+        nuevo = []
+        for x in outputs:
+            limpio = extraer_respuesta_limpia_llm(arreglar_lista_llm(x)).replace("repcon:", "")
+            nuevo.append(limpio)
+        output = primer_elemento_valido(nuevo)
+        mis_datos = merge_lista_y_parametro(mis_datos, output)
+        print("\n--- Estado actualizado de mis_datos ---")
+        print(mis_datos)
+        if output == "ERROR":
+            retry = True
+    
+    return True, mis_datos
+
+
+def procesar_query(texto):
+    mis_datos = [None, None, None, None, None, None]
+    
+    mis_datos[0] = extraer_cliente(texto)
+    mis_datos[1] = extraer_support_category(texto)
+
+    intentos = 0
+    
+    while intentos <20:
+        intentos +=1
+        continuar, mis_datos = completar_siguiente_campo(mis_datos)
+        #print(mis_datos)
+        if not continuar:
+            
+            break
+    
+    print(f'\nGraphRAG: query acabada. La query es {mis_datos}')
+
+    return mis_datos
+
+
+
+    
 # ============================================
 # PRUEBAS UNITARIAS
 # ============================================
@@ -154,63 +247,67 @@ class TestQueryProcessor(unittest.TestCase):
     def setUp(self):
         self.casos_de_prueba = [
             # 1 - 10 se activa solo DF
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_1497617941762302663 y la empresa company_149762002231762302862',
-                ['company__F7UMNAXNO', 'supportCategory_1497617941762302663', 'typeIncident__2', 'incidentOrigin__3',
-                 'supportGroup_149762881762302662', 'employee__294']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149763527461762303053 y la empresa company__QWY4YPRG7',
-                ['company__QWY4YPRG7', 'supportCategory_149763527461762303053', 'typeIncident__1', 'incidentOrigin__3',
-                 'supportGroup_149762881762302662', 'employee__294']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149762916841762302974 y la empresa company__UQHIM9QXH',
-                ['company__UQHIM9QXH', 'supportCategory_149762916841762302974', 'typeIncident__1', 'incidentOrigin__2',
-                 'supportGroup_14976631762302662', 'employee__486']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_1497611841762302662 y la empresa company__1GR6455ID',
-                ['company__1GR6455ID', 'supportCategory_1497611841762302662', 'typeIncident__1', 'incidentOrigin__2',
-                 'supportGroup_14976631762302662', 'employee__259']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149761991762302662 y la empresa company__2ZFMBC970',
-                ['company__2ZFMBC970', 'supportCategory_149761991762302662', 'typeIncident__1', 'incidentOrigin__2',
-                 'supportGroup_1497684871762302665', 'employee__366']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149767291231762303563 y la empresa ss',
-                ['ss', 'supportCategory_149767291231762303563', 'typeIncident__1', 'incidentOrigin__2',
-                 'supportGroup_14976691762302662', 'employee__366']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_1497681762302662 y la empresa company_149762002231762302862',
-                ['company__F7UMNAXNO', 'supportCategory_1497681762302662', 'typeIncident__1', 'incidentOrigin__3',
-                 'supportGroup_149762881762302662', 'employee__294']
-            ),
+          #  (
+          #      'Hola quiero completar una query. Tengo el supportCategory_1497617941762302663 y la empresa company_149762002231762302862',
+          #      
+          #      ['company__F7UMNAXNO', 'supportCategory_1497617941762302663', 'typeIncident__2', 'incidentOrigin__3',
+          #       'supportGroup_149762881762302662', 'employee__294']
+          #  ),
+
+         #   (
+         #       'Hola quiero completar una query. Tengo el supportCategory_149762916841762302974 y la empresa company__UQHIM9QXH',
+         #       ['company__UQHIM9QXH', 'supportCategory_149762916841762302974', 'typeIncident__1', 'incidentOrigin__2',
+         #        'supportGroup_14976631762302662', 'employee__486']
+         #   ),
+         #   (
+         #       'Hola quiero completar una query. Tengo el supportCategory_149763527461762303053 y la empresa company__QWY4YPRG7',
+         #       ['company__QWY4YPRG7', 'supportCategory_149763527461762303053', 'typeIncident__1', 'incidentOrigin__3',
+         #        'supportGroup_149762881762302662', 'employee__294']
+         #   ),
+            
+         #   (
+         #       'Hola quiero completar una query. Tengo el supportCategory_1497611841762302662 y la empresa company__1GR6455ID',
+         #       ['company__1GR6455ID', 'supportCategory_1497611841762302662', 'typeIncident__1', 'incidentOrigin__2',
+         #        'supportGroup_14976631762302662', 'employee__259']
+         #   )
+            ,
+       #    (
+       #        'Hola quiero completar una query. Tengo el supportCategory_149761991762302662 y la empresa company__2ZFMBC970',
+       #        ['company__2ZFMBC970', 'supportCategory_149761991762302662', 'typeIncident__1', 'incidentOrigin__2',
+       #         'supportGroup_1497684871762302665', 'employee__366']
+       #    ),
+       #     (
+       #         'Hola quiero completar una query. Tengo el supportCategory_149767291231762303563 y la empresa ss',
+       #         ['ss', 'supportCategory_149767291231762303563', 'typeIncident__1', 'incidentOrigin__2',
+       #          'supportGroup_14976691762302662', 'employee__366']
+       #     ),
+         #   (
+         #       'Hola quiero completar una query. Tengo el supportCategory_1497681762302662 y la empresa company_149762002231762302862',
+         #       ['company__F7UMNAXNO', 'supportCategory_1497681762302662', 'typeIncident__1', 'incidentOrigin__3',
+         #        'supportGroup_149762881762302662', 'employee__294']
+         #   ),
             (
                 'Hola quiero completar una query. Tengo el supportCategory_1497614541762302662 y la empresa ss',
                 ['ss', 'supportCategory_1497614541762302662', 'typeIncident__1', 'incidentOrigin__2',
                  'supportGroup_14976691762302662', 'employee__366']
             ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149763671762302662 y la empresa company_149767814271762303637',
-                ['company_149762002231762302862', 'supportCategory_149763671762302662', 'typeIncident__2',
-                 'incidentOrigin__3', 'supportGroup_149762881762302662', 'employee__294']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149764151762302662 y la empresa company__CFD5UKZBE',
-                ['company__CFD5UKZBE', 'supportCategory_149764151762302662', 'typeIncident__2', 'incidentOrigin__3',
-                 'supportGroup_149762881762302662', 'employee__294']
-            ),
-
+           # (
+           #     'Hola quiero completar una query. Tengo el supportCategory_149763671762302662 y la empresa company_149767814271762303637',
+           #     ['company_149762002231762302862', 'supportCategory_149763671762302662', 'typeIncident__2',
+           #      'incidentOrigin__3', 'supportGroup_149762881762302662', 'employee__294']
+           # ),
+           # (
+           #     'Hola quiero completar una query. Tengo el supportCategory_149764151762302662 y la empresa company__CFD5UKZBE',
+           #     ['company__CFD5UKZBE', 'supportCategory_149764151762302662', 'typeIncident__2', 'incidentOrigin__3',
+           #      'supportGroup_149762881762302662', 'employee__294']
+           # ),
+#
             # 11-20 se activa solo nv
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_1497611981762302662 y la empresa company__D52NKD9SS',
-                ['company__D52NKD9SS', 'supportCategory_1497611981762302662', 'typeIncident__1', 'incidentOrigin__2',
-                 'supportGroup_14976631762302662', 'employee__108']
-            ),
+           # (
+           #     'Hola quiero completar una query. Tengo el supportCategory_1497611981762302662 y la empresa company__D52NKD9SS',
+           #     ['company__D52NKD9SS', 'supportCategory_1497611981762302662', 'typeIncident__1', 'incidentOrigin__2',
+           #      'supportGroup_14976631762302662', 'employee__108']
+           # ),
             (
                 'Hola quiero completar una query. Tengo el supportCategory_1497611981762302662 y la empresa company__17Q32M10L',
                 ['company__17Q32M10L', 'supportCategory_1497611981762302662', 'typeIncident__1', 'incidentOrigin__2',
@@ -226,24 +323,24 @@ class TestQueryProcessor(unittest.TestCase):
                 ['company__17Q32M10L', 'supportCategory_1497691561762302665', 'typeIncident__1', 'incidentOrigin__2',
                  'supportGroup_149761521762302662', 'employee__366']
             ),
+           # (
+           #     'Hola quiero completar una query. Tengo el supportCategory_149765491762302662 y la empresa company__077OCQVXM',
+           #     ['company__077OCQVXM', 'supportCategory_149765491762302662', 'typeIncident__2', 'incidentOrigin__2',
+           #      'supportGroup_14976631762302662', 'employee__294']
+           # ),
             (
-                'Hola quiero completar una query. Tengo el supportCategory_149765491762302662 y la empresa company__077OCQVXM',
-                ['company__077OCQVXM', 'supportCategory_149765491762302662', 'typeIncident__2', 'incidentOrigin__2',
-                 'supportGroup_14976631762302662', 'employee__294']
-            ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_149765458501762303308 y la empresa company__UQ0EGOKMC',
+                'Hola quiero completar una query. Tengo el supportCategory_149765458501762303308 y la empresa company__UQ0EGOKMC',  #EL BUENO
                 ['company__UQ0EGOKMC', 'supportCategory_149765458501762303308', 'typeIncident__2', 'incidentOrigin__2',
                  'supportGroup_149761521762302662', 'employee__294']
             ),
-            (
-                'Hola quiero completar una query. Tengo el supportCategory_1497611981762302662 y la empresa company__DQJKY6U6E',
-                ['company__DQJKY6U6E', 'supportCategory_1497611981762302662', 'typeIncident__1', 'incidentOrigin__2',
-                 'supportGroup_14976631762302662', 'employee__108']
-            ),
+           # (
+           #     'Hola quiero completar una query. Tengo el supportCategory_1497611981762302662 y la empresa company__DQJKY6U6E',
+           #     ['company__DQJKY6U6E', 'supportCategory_1497611981762302662', 'typeIncident__1', 'incidentOrigin__2',
+           #      'supportGroup_14976631762302662', 'employee__108']
+           # ),
             (
                 'Hola quiero completar una query. Tengo el supportCategory_149765491762302662 y la empresa company__10QMPVMGA',
-                ['company__10QMPVMGA', 'supportCategory_149765491762302662', 'typeIncident__2', 'incidentOrigin__2',
+                ['company__10QMPVMGA', 'supportCategory_149765491762302662', 'typeIncident__2', 'incidentOrigin__2', #hecho
                  'supportGroup_14976631762302662', 'employee__294']
             ),
             (
@@ -420,14 +517,20 @@ class TestQueryProcessor(unittest.TestCase):
         Debes ajustar la lógica interna de este método para que llame a tu función
         procesadora y verifique la salida.
         """
-        for input_texto, output_esperado in self.casos_de_prueba:
+        for i, (input_texto, output_esperado) in enumerate(self.casos_de_prueba):
             with self.subTest(input_texto=input_texto):
+                result = procesar_query(input_texto)
+                self.assertEqual(
+                    result, output_esperado,
+                    msg=f"Caso {i} fallido.\nQuery: {input_texto}\nEsperado: {output_esperado}\nObtenido: {result}"
+                )
+                
                 # ==============================================================
                 # AQUI DEBES INCLUIR LA LLAMADA A TU LÓGICA DE PROCESAMIENTO
                 # Ejemplo: resultado = procesar_query(input_texto)
                 # self.assertEqual(resultado, output_esperado)
                 # ==============================================================
-                pass  # <- Reemplazar por la lógica real cuando esté lista
+               
 
 
 def ejecutar_tests_en_fichero():
@@ -452,145 +555,145 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--test':
         ejecutar_tests_en_fichero()
 
-    print("\n" + "=" * 40)
-    print(" SISTEMA GraphRAG + Ollama INICIADO")
-    print("====================================")
-    print("Escribe 'q' para salir")
-
-    # Inicialización de variables de estado
-    convo_length = 2
-    unique_conv_id = str(uuid4())
-    prev_conv = ""
-    filename = unique_conv_id + "_log.txt"
-    log_file_path = os.path.join(config.LOGS_DIR, filename)
-
-    save_file(log_file_path, prev_conv)
-    a = ""
-    primera = True
-    mis_datos = [None, None, None, None, None, None]
-
-    while True:
-
-        if None not in mis_datos and 'None' not in mis_datos:
-            print('\nGraphRAG: query acabada. La query completada es:')
-            print(mis_datos)
-            break
-
-        if primera:
-            a = input('\nUSER: ')
-
-        primera = False
-
-        if a.lower() == "q":
-            print("\nFinalizando conversación...")
-            break
-
-        timestamp = time()
-        timestring = timestamp_to_datetime(timestamp)
-        message = f"USER: {timestring} - {a}"
-
-        # ----------------------------------------
-        # EXTRACCIÓN DE DATOS INICIALES
-        # ----------------------------------------
-        if mis_datos[0] is None:
-            cliente = extraer_cliente(a)
-            if cliente: print(f"Cliente extraído: {cliente}")
-            mis_datos[0] = cliente
-
-        if mis_datos[1] is None:
-            support_cat = extraer_support_category(a)
-            mis_datos[1] = support_cat
-
-        # ----------------------------------------
-        # VERIFICACIÓN DE FIN DE BÚSQUEDA
-        # ----------------------------------------
-
-        try:
-            cat_buscar = mis_datos.index(None)
-        except ValueError:
-            cat_buscar = mis_datos.index('None')
-
-        # ----------------------------------------
-        # CONSULTA AL GRAFO RDF
-        # ----------------------------------------
-        graph_data = buscar_frecuentes_por_opcion(graph, mis_datos, cat_buscar)
-
-        if not graph_data:
-            graph_data = inferir_valor_adecuado(graph, mis_datos, cat_buscar)
-
-        # ----------------------------------------
-        # LÓGICA DE REINTENTOS Y LLM
-        # ----------------------------------------
-        max_a_probar = len(graph_data) if graph_data else 0
-        siguiente_a_probar = 1
-        retry = True
-
-        while retry:
-            retry = False
-            prev_conv = open_file(log_file_path)
-
-            if not graph_data:
-                data = "No se encontraron datos. Seguramente sea un error por parte del usuario. Pregunta si se ha introducido bien el grupo."
-            else:
-                mi_opcion = graph_data[0]
-                if retry and siguiente_a_probar < max_a_probar:
-                    mi_opcion = graph_data[siguiente_a_probar]
-                    siguiente_a_probar += 1
-
-                data = (
-                    f"El campo a rellenar es "
-                    f"{config.DICCIONARIO_PREFIJOS[cat_buscar]}"
-                    f" y estas son las opciones:\n\nrepcon:"
-                    f"{config.DICCIONARIO_PREFIJOS[cat_buscar]}"
-                    f" repcon:{mi_opcion}"
-                )
-
-            # Preparar prompt
-            reglas = formatear_para_llm(
-                './textos/reglas_incidentes.json',
-                tipo_cond=config.DICCIONARIO_PREDICADOS[cat_buscar]
-            )
-
-            prompt_base = open_file(config.CONTEXTO_FILE_PATH)
-            mensajeinstruc = "Se espera que extraigas el campo " + config.DICCIONARIO_PREFIJOS[cat_buscar]
-            datos_existentes = formatear_datos_existentes_LLM(mis_datos)
-
-            prompt = (
-                prompt_base
-                .replace('<<DATOS>>', data)
-                .replace('<<CONVERSACIÓN>>', datos_existentes)
-                .replace('<<MENSAJE>>', mensajeinstruc)
-                .replace('<<REGLAS>>', "\n".join(reglas))
-            )
-
-            # Ejecutar LLM en paralelo usando asyncio (proveniente del Script 1)
-            outputs = asyncio.run(text_completion_batch([prompt, prompt, prompt]))
-
-            # Procesar y limpiar respuesta
-            nuevo = []
-            for x in outputs:
-                limpio = extraer_respuesta_limpia_llm(arreglar_lista_llm(x)).replace("repcon:", "")
-                nuevo.append(limpio)
-
-            output = elemento_mas_comun(nuevo)
-            mis_datos = merge_lista_y_parametro(mis_datos, output)
-
-            print("\n--- Estado actualizado de mis_datos ---")
-            print(mis_datos)
-
-            if output == "ERROR":
-                retry = True
-
-        # ----------------------------------------
-        # GUARDAR LOG Y RESPONDER
-        # ----------------------------------------
-        timestamp = time()
-        timestring = timestamp_to_datetime(timestamp)
-        messageBot = f"[Asistente]: {timestring} - {output}"
-
-        print(f"\n[Asistente]: {output}")
-
-        save_file(
-            log_file_path,
-            prev_conv + "\n" + message + "\n" + messageBot
-        )
+    #print("\n" + "=" * 40)
+    #print(" SISTEMA GraphRAG + Ollama INICIADO")
+    #print("====================================")
+    #print("Escribe 'q' para salir")
+#
+    ## Inicialización de variables de estado
+    #convo_length = 2
+    #unique_conv_id = str(uuid4())
+    #prev_conv = ""
+    #filename = unique_conv_id + "_log.txt"
+    #log_file_path = os.path.join(config.LOGS_DIR, filename)
+#
+    #save_file(log_file_path, prev_conv)
+    #a = ""
+    #primera = True
+    #mis_datos = [None, None, None, None, None, None]
+#
+    #while True:
+#
+    #    if None not in mis_datos and 'None' not in mis_datos:
+    #        print('\nGraphRAG: query acabada. La query completada es:')
+    #        print(mis_datos)
+    #        break
+#
+    #    if primera:
+    #        a = input('\nUSER: ')
+#
+    #    primera = False
+#
+    #    if a.lower() == "q":
+    #        print("\nFinalizando conversación...")
+    #        break
+#
+    #    timestamp = time()
+    #    timestring = timestamp_to_datetime(timestamp)
+    #    message = f"USER: {timestring} - {a}"
+#
+    #    # ----------------------------------------
+    #    # EXTRACCIÓN DE DATOS INICIALES
+    #    # ----------------------------------------
+    #    if mis_datos[0] is None:
+    #        cliente = extraer_cliente(a)
+    #        if cliente: print(f"Cliente extraído: {cliente}")
+    #        mis_datos[0] = cliente
+#
+    #    if mis_datos[1] is None:
+    #        support_cat = extraer_support_category(a)
+    #        mis_datos[1] = support_cat
+#
+    #    # ----------------------------------------
+    #    # VERIFICACIÓN DE FIN DE BÚSQUEDA
+    #    # ----------------------------------------
+#
+    #    try:
+    #        cat_buscar = mis_datos.index(None)
+    #    except ValueError:
+    #        cat_buscar = mis_datos.index('None')
+#
+    #    # ----------------------------------------
+    #    # CONSULTA AL GRAFO RDF
+    #    # ----------------------------------------
+    #    graph_data = buscar_frecuentes_por_opcion(graph, mis_datos, cat_buscar)
+#
+    #    if not graph_data:
+    #        graph_data = inferir_valor_adecuado(graph, mis_datos, cat_buscar)
+#
+    #    # ----------------------------------------
+    #    # LÓGICA DE REINTENTOS Y LLM
+    #    # ----------------------------------------
+    #    max_a_probar = len(graph_data) if graph_data else 0
+    #    siguiente_a_probar = 1
+    #    retry = True
+#
+    #    while retry:
+    #        retry = False
+    #        prev_conv = open_file(log_file_path)
+#
+    #        if not graph_data:
+    #            data = "No se encontraron datos. Seguramente sea un error por parte del usuario. Pregunta si se ha introducido bien el grupo."
+    #        else:
+    #            mi_opcion = graph_data[0]
+    #            if retry and siguiente_a_probar < max_a_probar:
+    #                mi_opcion = graph_data[siguiente_a_probar]
+    #                siguiente_a_probar += 1
+#
+    #            data = (
+    #                f"El campo a rellenar es "
+    #                f"{config.DICCIONARIO_PREFIJOS[cat_buscar]}"
+    #                f" y estas son las opciones:\n\nrepcon:"
+    #                f"{config.DICCIONARIO_PREFIJOS[cat_buscar]}"
+    #                f" repcon:{mi_opcion}"
+    #            )
+#
+    #        # Preparar prompt
+    #        reglas = formatear_para_llm(
+    #            './textos/reglas_incidentes.json',
+    #            tipo_cond=config.DICCIONARIO_PREDICADOS[cat_buscar]
+    #        )
+#
+    #        prompt_base = open_file(config.CONTEXTO_FILE_PATH)
+    #        mensajeinstruc = "Se espera que extraigas el campo " + config.DICCIONARIO_PREFIJOS[cat_buscar]
+    #        datos_existentes = formatear_datos_existentes_LLM(graph_data)
+#
+    #        prompt = (
+    #            prompt_base
+    #            .replace('<<DATOS>>', data)
+    #            .replace('<<CONVERSACIÓN>>', datos_existentes)
+    #            .replace('<<MENSAJE>>', mensajeinstruc)
+    #            .replace('<<REGLAS>>', "\n".join(reglas))
+    #        )
+#
+    #        # Ejecutar LLM en paralelo usando asyncio (proveniente del Script 1)
+    #        outputs = asyncio.run(text_completion_batch([prompt, prompt, prompt]))
+#
+    #        # Procesar y limpiar respuesta
+    #        nuevo = []
+    #        for x in outputs:
+    #            limpio = extraer_respuesta_limpia_llm(arreglar_lista_llm(x)).replace("repcon:", "")
+    #            nuevo.append(limpio)
+#
+    #        output = elemento_mas_comun(nuevo)
+    #        mis_datos = merge_lista_y_parametro(mis_datos, output)
+#
+    #        print("\n--- Estado actualizado de mis_datos ---")
+    #        print(mis_datos)
+#
+    #        if output == "ERROR":
+    #            retry = True
+#
+    #    # ----------------------------------------
+    #    # GUARDAR LOG Y RESPONDER
+    #    # ----------------------------------------
+    #    timestamp = time()
+    #    timestring = timestamp_to_datetime(timestamp)
+    #    messageBot = f"[Asistente]: {timestring} - {output}"
+#
+    #    print(f"\n[Asistente]: {output}")
+#
+    #    save_file(
+    #        log_file_path,
+    #        prev_conv + "\n" + message + "\n" + messageBot
+    #    )

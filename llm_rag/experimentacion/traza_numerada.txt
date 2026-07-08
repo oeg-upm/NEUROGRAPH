@@ -1,0 +1,215 @@
+==================================================
+ INICIANDO EVALUACIÓN DE 53 QUERIES 
+==================================================
+1. ACIERTO | RuleType: df | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_1  y la empresa company_1"
+
+2. ACIERTO | RuleType: df | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_2   y la empresa company_1"
+
+3. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_3 y la empresa company_2"
+
+4. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_4 y la empresa company_3"
+
+5. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_5 y la empresa company_4"
+
+6. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_6 y la empresa company_24"
+
+7. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_7 y la empresa company_24"
+
+8. ACIERTO | RuleType: df | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_8 y la empresa company_5"
+
+9. ACIERTO | RuleType: df | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_9 y la empresa company_5"
+
+10. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_10 y la empresa company_6"
+
+11. ACIERTO | RuleType: df | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_10 y la empresa company_6"
+
+12. FALLO | RuleType: df | RuleField: hasTechnician
+   Esperado: ['company_7', 'supportCategory_11', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', 'employee_1']
+   Obtenido: ['company_7', 'supportCategory_11', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', 'ERROR']
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_11 y la empresa company_7"
+
+13. ACIERTO | RuleType: noValid | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_12 y la empresa company_8"
+
+14. ACIERTO | RuleType: noValid | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_12 y la empresa company_9"
+
+15. ACIERTO | RuleType: noValid | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_5 y la empresa company_9"
+
+16. ACIERTO | RuleType: noValid | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_13 y la empresa company_9"
+
+17. ACIERTO | RuleType: noValid | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_14 y la empresa company_10"
+
+18. ACIERTO | RuleType: noValid | RuleField: incident_hasOrigin
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_15   y la empresa company_11"
+
+19. ACIERTO | RuleType: noValid | RuleField: incident_hasOrigin
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_16    y la empresa company_11"
+
+20. ACIERTO | RuleType: noValid | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_17  y la empresa company_12"
+
+21. FALLO | RuleType: noValid | RuleField: hasTypeInc
+   Esperado: ['company_12', 'supportCategory_18', 'ERROR', None, None, None]
+   Obtenido: ['company_12', 'supportCategory_18', 'typeIncident__3', None, None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_18   y la empresa company_12"
+
+22. ACIERTO | RuleType: noValid | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_19 y la empresa company_12"
+
+23. ACIERTO | RuleType: noValid | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_14 y la empresa company_12"
+
+24. ACIERTO | RuleType: both | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_20 y la empresa company_13"
+
+25. FALLO | RuleType: both | RuleField: hasTechnician
+   Esperado: ['company_13', 'supportCategory_11', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_2', 'employee_2']
+   Obtenido: ['company_13', 'supportCategory_11', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_2', 'ERROR']
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_11 y la empresa company_13"
+
+26. ACIERTO | RuleType: both | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_21 y la empresa company_14"
+
+27. ACIERTO | RuleType: both | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_21 y la empresa company_15"
+
+28. ACIERTO | RuleType: both | RuleField: incident_hasOrigin
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_22 y la empresa company_16"
+
+29. FALLO | RuleType: both | RuleField: incident_hasOrigin
+   Esperado: ['company_17', 'supportCategory_22', 'typeIncident__1', 'incidentOrigin__3', None, None]
+   Obtenido: ['company_17', 'supportCategory_22', 'typeIncident__1', 'ERROR', None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_22 y la empresa company_17"
+
+30. FALLO | RuleType: both | RuleField: hasSupportGroup
+   Esperado: ['company_18', 'supportCategory_23', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_3', None]
+   Obtenido: ['company_18', 'supportCategory_23', 'typeIncident__1', 'incidentOrigin__2', 'ERROR', None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_23 y la empresa company_18"
+
+31. ACIERTO | RuleType: df | RuleField: incident_hasOrigin
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_24 y la empresa company_12"
+
+32. ACIERTO | RuleType: df | RuleField: incident_hasOrigin
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_24 y la empresa company_19"
+
+33. FALLO | RuleType: none | RuleField: hasTypeInc
+   Esperado: ['company_20', 'supportCategory_25', 'typeIncident__2', None, None, None]
+   Obtenido: ['company_20', 'supportCategory_25', 'typeIncident__3', None, None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_25 y la empresa company_20"
+
+34. FALLO | RuleType: none | RuleField: incident_hasOrigin
+   Esperado: ['company_20', 'supportCategory_25', 'typeIncident__2', 'incidentOrigin__2', None, None]
+   Obtenido: ['company_20', 'supportCategory_25', 'typeIncident__2', 'incidentOrigin__1', None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_25 y la empresa company_20"
+
+35. ACIERTO | RuleType: none | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_25 y la empresa company_20"
+
+36. ACIERTO | RuleType: none | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_25 y la empresa company_20"
+
+37. ACIERTO | RuleType: none | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_8 y la empresa company_3"
+
+38. FALLO | RuleType: none | RuleField: incident_hasOrigin
+   Esperado: ['company_3', 'supportCategory_8', 'typeIncident__1', 'incidentOrigin__2', None, None]
+   Obtenido: ['company_3', 'supportCategory_8', 'typeIncident__1', 'incidentOrigin__1', None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_8 y la empresa company_3"
+
+39. FALLO | RuleType: none | RuleField: hasSupportGroup
+   Esperado: ['company_3', 'supportCategory_8', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', None]
+   Obtenido: ['company_3', 'supportCategory_8', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_4', None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_8 y la empresa company_3"
+
+40. FALLO | RuleType: none | RuleField: hasTechnician
+   Esperado: ['company_3', 'supportCategory_8', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', 'employee_3']
+   Obtenido: ['company_3', 'supportCategory_8', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', 'ERROR']
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_8 y la empresa company_3"
+
+41. FALLO | RuleType: none | RuleField: hasTypeInc
+   Esperado: ['company_12', 'supportCategory_26', 'typeIncident__2', None, None, None]
+   Obtenido: ['company_12', 'supportCategory_26', 'ERROR', None, None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_26 y la empresa company_12"
+
+42. FALLO | RuleType: none | RuleField: incident_hasOrigin
+   Esperado: ['company_12', 'supportCategory_26', 'typeIncident__2', 'incidentOrigin__2', None, None]
+   Obtenido: ['company_12', 'supportCategory_26', 'typeIncident__2', 'incidentOrigin__3', None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_26 y la empresa company_12"
+
+43. ACIERTO | RuleType: none | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_26 y la empresa company_12"
+
+44. ACIERTO | RuleType: none | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_26 y la empresa company_12"
+
+45. ACIERTO | RuleType: none | RuleField: hasTypeInc
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_27 y la empresa company_21"
+
+46. FALLO | RuleType: none | RuleField: incident_hasOrigin
+   Esperado: ['company_21', 'supportCategory_27', 'typeIncident__1', 'incidentOrigin__2', None, None]
+   Obtenido: ['company_21', 'supportCategory_27', 'typeIncident__1', 'incidentOrigin__1', None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_27 y la empresa company_21"
+
+47. FALLO | RuleType: none | RuleField: hasSupportGroup
+   Esperado: ['company_21', 'supportCategory_27', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', None]
+   Obtenido: ['company_21', 'supportCategory_27', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_4', None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_27 y la empresa company_21"
+
+48. ACIERTO | RuleType: none | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_27 y la empresa company_21"
+
+49. FALLO | RuleType: none | RuleField: hasTypeInc
+   Esperado: ['company_22', 'supportCategory_28', 'typeIncident__1', None, None, None]
+   Obtenido: ['company_22', 'supportCategory_28', 'typeIncident__3', None, None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_28 y la empresa company_22"
+
+50. FALLO | RuleType: none | RuleField: incident_hasOrigin
+   Esperado: ['company_22', 'supportCategory_28', 'typeIncident__1', 'incidentOrigin__2', None, None]
+   Obtenido: ['company_22', 'supportCategory_28', 'typeIncident__1', 'incidentOrigin__3', None, None]
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_28 y la empresa company_22"
+
+51. ACIERTO | RuleType: none | RuleField: hasSupportGroup
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_28 y la empresa company_22"
+
+52. FALLO | RuleType: none | RuleField: hasTechnician
+   Esperado: ['company_22', 'supportCategory_28', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', 'employee_3']
+   Obtenido: ['company_22', 'supportCategory_28', 'typeIncident__1', 'incidentOrigin__2', 'supportGroup_1', 'ERROR']
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_28 y la empresa company_22"
+
+53. ACIERTO | RuleType: noValid | RuleField: hasTechnician
+GraphRAG: query acabada. La query es: "Hola quiero completar una query. Tengo el supportCategory_14 y la empresa company_23"
+
+============================================
+              RESUMEN DE PRUEBAS            
+============================================
+Total de queries : 53
+Aciertos totales : 36
+Fallos totales   : 17
+Precisión Global : 67.92%
+
+--- Resultados por 'ruletype' ---
+  df        : 13 aciertos, 1 fallos (92.9%)
+  noValid   : 11 aciertos, 1 fallos (91.7%)
+  both      : 4 aciertos, 3 fallos (57.1%)
+  none      : 8 aciertos, 12 fallos (40.0%)
+
+--- Resultados por 'ruleField' ---
+  hasTypeInc          : 8 aciertos, 4 fallos (66.7%)
+  hasSupportGroup     : 12 aciertos, 3 fallos (80.0%)
+  hasTechnician       : 11 aciertos, 4 fallos (73.3%)
+  incident_hasOrigin  : 5 aciertos, 6 fallos (45.5%)
