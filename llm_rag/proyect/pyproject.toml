@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm_rag_utils"
+version = "0.1.0"
+authors = [
+    { name="Jaime Vázquez", email="vazquezrivera.jaime@gmail.com" }
+]
+description = "Funciones de LLM GraphRAG"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
