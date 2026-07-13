@@ -25,6 +25,14 @@ Evalúa automáticamente un dataset JSON contra el sistema GraphRAG usando las m
 Inicia el modo 'chat', permitiendo que el usuario escriba por la terminal los dos primeros atributos de búsqueda y devolviendo por pantalla la incidencia con los 6 atributos completos, utilizando el completado del LLM para rellenar la incidencia. También como complemento se genera un log que resgistra la conversación. Toma de parámetros de entrada el contexto, el modelo y el directorio donde se guardarán los logs.
 
 
+## Instalación
+
+Colocarse en la ruta proyect y ejecutar el comando
+
+```bash
+pip install -e .
+```
+
 ## Inicializacion
 
 ```python
