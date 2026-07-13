@@ -83,9 +83,7 @@
         "appliesTo": "incident",
         "ruleType": "df",
         "if": {
-            "hasSupportGroup": "supportGroup_149761041762302662",
-            "hasTypeInc": "typeIncident__2"
-        },
+            "hasSupportGroup": "supportGroup_149761041762302662"},
         "then": {
             "hasExternalTechnician": "person_1497642801762302663"
         }
@@ -94,8 +92,7 @@
         "appliesTo": "incident",
         "ruleType": "df",
         "if": {
-            "int_hasCustomer": "ss",
-            "hasTypeInc": "typeIncident__1"
+            "int_hasCustomer": "ss"
         },
         "then": {
             "hasSupportGroup": "supportGroup_14976691762302662"
@@ -105,7 +102,6 @@
         "appliesTo": "incident",
         "ruleType": "df",
         "if": {
-            "int_hasCustomer": "company__P8EM3ZO35",
             "hasSupportTeam": "supportTeam_14976254341762302678"
         },
         "then": {
@@ -238,8 +234,7 @@
         "appliesTo": "incident",
         "ruleType": "df",
         "if": {
-            "int_hasCustomer": "company__1GR6455ID",
-            "incident_hasOrigin": "incidentOrigin__2"
+            "int_hasCustomer": "company__1GR6455ID"
         },
         "then": {
             "hasTechnician": "employee__259"
@@ -249,7 +244,6 @@
         "appliesTo": "incident",
         "ruleType": "df",
         "if": {
-            "incident_hasOrigin": "incidentOrigin__3",
             "hasSupportGroup": "supportGroup_149762611762302662"
         },
         "then": {
@@ -260,8 +254,7 @@
         "appliesTo": "incident",
         "ruleType": "df",
         "if": {
-            "int_hasCustomer": "company_149769449541762303894",
-            "hasTypeInc": "typeIncident__1"
+            "int_hasCustomer": "company_149769449541762303894"
         },
         "then": {
             "hasSupportGroup": "supportGroup_149761011762302662"
