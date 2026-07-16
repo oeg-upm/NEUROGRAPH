@@ -1,0 +1,60 @@
+[
+    {
+        "query": "Hola quiero completar una query. Tengo el supportCategory_149762445241762302917  y la empresa company__SYJ8K7RUK",
+        "expected": [
+            "company__SYJ8K7RUK",
+            "supportCategory_149762445241762302917",
+            "typeIncident__2"
+        ],
+        "rule": "4",
+        "ruletype": "df",
+        "ruleField": "hasTypeInc",
+        "ruleValue": "typeIncident__2"
+    },
+
+    {
+        "query": "Hola quiero completar una query. Tengo el supportCategory_1497691561762302665 y la empresa company__17Q32M10L",
+        "expected": [
+            "company__17Q32M10L",
+            "supportCategory_1497691561762302665",
+            "typeIncident__1",
+            "incidentOrigin__2",
+            "ERROR"
+        ],
+        "rule": "40",
+        "ruletype": "noValid",
+        "ruleField": "hasSupportGroup",
+        "ruleValue": "supportGroup_14976631762302662"
+    },
+
+        {
+        "query": "Hola quiero completar una query. Tengo el supportCategory_149767060481762303533 y la empresa company__3S8A2Y7FV",
+        "expected": [
+            "company__3S8A2Y7FV",
+            "supportCategory_149767060481762303533",
+            "typeIncident__1",
+            "incidentOrigin__2",
+            "supportGroup_149765457361762303308",
+            "employee__429"
+        ],
+        "rule": "1",
+        "ruletype": "both",
+        "ruleField": "hasTechnician",
+        "ruleValue": "employee__429"
+    },
+
+    {
+        "query": "Hola quiero completar una query. Tengo el supportCategory_1497615221762302662 y la empresa company__SEI95B7UO",
+        "expected": [
+            "company__SEI95B7UO",
+            "supportCategory_1497615221762302662",
+            "typeIncident__1",
+            "incidentOrigin__2",
+            "supportGroup_14976631762302662"
+        ],
+        "rule": "-1",
+        "ruletype": "none",
+        "ruleField": "hasSupportGroup",
+        "ruleValue": "none"
+    }
+]
