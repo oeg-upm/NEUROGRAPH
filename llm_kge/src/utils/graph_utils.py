@@ -23,7 +23,18 @@ def load_graph(path: Path) -> Graph:
     print(f"Cargando grafo desde {path} ...")
     g = Graph()
     fmt = "n3" if str(path).endswith(".n3") else "turtle"
-    g.parse(str(path), format=fmt)
+    try:
+        g.parse(str(path), format=fmt)
+    except Exception as e:
+        # Guardián anti-truncado: un .ttl/.n3 cortado a medias (p. ej. una
+        # conversión o descarga interrumpida) hace que rdflib vuelque por
+        # consola el fragmento donde falla. Lo convertimos en un error claro.
+        raise ValueError(
+            f"No se pudo parsear {path} como {fmt}. "
+            f"El fichero puede estar truncado o corrupto: revisa que acabe "
+            f"en ' .' y que se generase por completo (vuelve a ejecutar la "
+            f"fase que lo produce).\n  Detalle rdflib: {e}"
+        ) from e
     print(f"      {len(g)} tripletas cargadas.")
     return g
 
